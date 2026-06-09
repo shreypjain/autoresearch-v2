@@ -22,14 +22,9 @@ autoresearch onboard
 autoresearch loop --ui
 ```
 
-Use the `autoresearch` CLI as the primary interface. In each new terminal window, run `source .venv/bin/activate` before calling `autoresearch`. If the editable console script is stale, use the repo-local wrapper instead:
+Use the `autoresearch` CLI as the primary interface. In each new terminal window, run `source .venv/bin/activate` before calling `autoresearch`. If the command ever fails after local code changes, run `make setup` once; it repairs the venv command shims without reinstalling dependencies unless needed.
 
-```bash
-./autoresearch monitor
-./autoresearch nudge "Run a train-fitted model branch next."
-```
-
-`make` is kept as a thin bootstrap/convenience layer for fresh clones and for commands you want to run without activating the venv.
+`make` is kept as a thin bootstrap/convenience layer for fresh clones and for commands you want to run before activating the venv.
 
 ## CLI
 

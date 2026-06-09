@@ -5,6 +5,7 @@ VENV ?= .venv
 PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
 INSTALL_STAMP := $(VENV)/.autoresearch-installed
+CLI_STAMP := $(VENV)/.autoresearch-cli-shims
 SRC_PATH := $(CURDIR)/src
 RUN_PY := PYTHONPATH=$(SRC_PATH) $(PY)
 
@@ -18,6 +19,24 @@ $(INSTALL_STAMP): pyproject.toml | $(PY)
 	$(PIP) install --upgrade pip
 	$(PIP) install -e .
 	@touch $(INSTALL_STAMP)
+
+$(CLI_STAMP): $(INSTALL_STAMP) Makefile
+	@printf '%s\n' \
+		'#!/usr/bin/env bash' \
+		'set -euo pipefail' \
+		'ROOT_DIR="$(CURDIR)"' \
+		'export PYTHONPATH="$${ROOT_DIR}/src$${PYTHONPATH:+:$${PYTHONPATH}}"' \
+		'exec "$${ROOT_DIR}/$(VENV)/bin/python" -m autoresearch.cli "$$@"' \
+		> "$(VENV)/bin/autoresearch"
+	@printf '%s\n' \
+		'#!/usr/bin/env bash' \
+		'set -euo pipefail' \
+		'ROOT_DIR="$(CURDIR)"' \
+		'export PYTHONPATH="$${ROOT_DIR}/src$${PYTHONPATH:+:$${PYTHONPATH}}"' \
+		'exec "$${ROOT_DIR}/$(VENV)/bin/python" -m autoresearch.new_experiment "$$@"' \
+		> "$(VENV)/bin/new-experiment"
+	@chmod +x "$(VENV)/bin/autoresearch" "$(VENV)/bin/new-experiment"
+	@touch $(CLI_STAMP)
 
 start: bootstrap
 
@@ -33,8 +52,9 @@ monitor: setup
 monitor-watch: setup
 	$(RUN_PY) -m autoresearch.cli monitor --watch
 
-setup: $(INSTALL_STAMP)
-	@$(RUN_PY) -c "import autoresearch" 2>/dev/null || { rm -f $(INSTALL_STAMP); $(MAKE) $(INSTALL_STAMP); }
+setup: $(CLI_STAMP)
+	@$(RUN_PY) -c "import autoresearch" 2>/dev/null || { rm -f $(INSTALL_STAMP) $(CLI_STAMP); $(MAKE) $(CLI_STAMP); }
+	@"$(VENV)/bin/autoresearch" --help >/dev/null 2>&1 || { rm -f $(CLI_STAMP); $(MAKE) $(CLI_STAMP); }
 
 demo-data:
 	$(RUN_PY) -m autoresearch.prepare_data --write-demo
