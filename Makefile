@@ -4,12 +4,18 @@ PYTHON ?= python3
 VENV ?= .venv
 PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
+INSTALL_STAMP := $(VENV)/.autoresearch-installed
 
-bootstrap:
+bootstrap: setup
+	$(PY) -m autoresearch.bootstrap
+
+$(PY):
 	$(PYTHON) -m venv $(VENV)
+
+$(INSTALL_STAMP): pyproject.toml | $(PY)
 	$(PIP) install --upgrade pip
 	$(PIP) install -e .
-	$(PY) -m autoresearch.bootstrap
+	@touch $(INSTALL_STAMP)
 
 start: bootstrap
 
@@ -25,10 +31,8 @@ monitor: setup
 monitor-watch: setup
 	$(PY) -m autoresearch.cli monitor --watch
 
-setup:
-	$(PYTHON) -m venv $(VENV)
-	$(PIP) install --upgrade pip
-	$(PIP) install -e .
+setup: $(INSTALL_STAMP)
+	@$(PY) -c "import autoresearch" 2>/dev/null || { rm -f $(INSTALL_STAMP); $(MAKE) $(INSTALL_STAMP); }
 
 demo-data:
 	$(PY) -m autoresearch.prepare_data --write-demo

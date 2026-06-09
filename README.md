@@ -22,7 +22,7 @@ autoresearch onboard
 autoresearch loop --ui
 ```
 
-Use the `autoresearch` CLI as the primary interface. `make` is kept as a thin bootstrap/convenience layer for fresh clones.
+Use the `autoresearch` CLI as the primary interface. In each new terminal window, run `source .venv/bin/activate` before calling `autoresearch`, or call `.venv/bin/autoresearch` directly. `make` is kept as a thin bootstrap/convenience layer for fresh clones and for commands you want to run without activating the venv.
 
 ## CLI
 
@@ -80,6 +80,8 @@ make monitor        # same as autoresearch monitor
 make monitor-watch  # same as autoresearch monitor --watch
 make test           # smoke-test the harness
 ```
+
+Make shortcuts reuse the existing virtualenv. They should not reinstall dependencies unless `pyproject.toml` changed or the editable install is missing.
 
 ## Files That Matter
 
