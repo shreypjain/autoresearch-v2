@@ -1,4 +1,4 @@
-# Agentic ML Experiment Harness
+# Autoresearch V2
 
 ## Purpose
 
@@ -9,69 +9,90 @@ The motivating example is `prcm-dkex`: improving the pricing algorithm for a DKE
 The core idea is:
 
 ```text
-candidate generation
-→ controlled experiment
-→ fixed evaluation
-→ accept/reject
-→ log result
+experiment candidate generation (1-5 experiments)
+→ controlled and finite scoped experiment
+→ test on structured evaluation dataset
+→ accept / reject
+→ log result and analyze what worked / what didn't
 → branch promising ideas
 → repeat
 ```
 
-This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM training and made more durable for real engineering work.
+This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM training and made more durable for real engineering work and far more expansive in terms of the ML techniques that can be trained.
 
 ---
 
 ## Design Goals
 
 1. **Fast experimentation**
-   - Agents should be able to propose and test many candidate changes quickly.
-   - Experiments should run locally, in CI, or on cloud runners with minimal setup.
+   - Agents should be able to propose and test 1-5 candidate changes quickly.
+   - Experiments should run locally, in CI, or on single H100s with minimal setup.
    - Results should be easy to compare across branches and runs.
+     - All results should have tags, be grouped by experiment types, and have a pointer to previous inspiration experiments.
 
 2. **Strong evaluation boundaries**
    - Agents may edit the candidate surface.
-   - Agents may not edit the evaluator, holdout data, scoring rules, or replay construction.
+   - Agents may not edit the evaluator / evaluation harness, holdout data, scoring rules, or replay construction.
    - The harness must prevent reward hacking wherever possible.
+     - Important to generate adversarial tests to mitigate against this.
 
 3. **Parallel candidate generation**
    - Multiple agents or multiple branches should be able to test ideas concurrently.
+     - Should be in different branches of code, so not an issue to have separate agents creating and running these experiments.
    - Good ideas should be merged into a best-so-far branch.
+     - Space for improvement should be measured here (ability to hill climb train dataset accuracy)
    - Bad ideas should be discarded but logged.
+     - There should be high level descriptions alongside `name`, `description`, and `tags` when describing these files (like YAML file for skills `name` and `description` tags).
 
 4. **Generalized beyond LLMs**
    - Works for pricing algorithms, ranking models, feature engineering, forecasting, optimization, RL-like policies, and classical ML.
-   - Does not require transformer training as the starting point.
+   - Does not require transformer training as the starting point. In fact, should be discouraged until upgrades are essential.
+   - Prioritize CPU bound smaller models, grow larger as signs of additional train set accuracy continues to go up.
+     - The bitter lesson scaling laws can be prioritized here, until it doesn't work and you need to destroy what you do completely.
+     - If you are hitting a complete wall, you might need to traverse multiple levels back and stop making additional improvements to this architecture that doesn't matter.
+   - **Important caveat**: There will be clear cases where you just don't have a feature rich enough dataset to improve accuracy on the test or hold out set. Data cleanliness, interpretability, and diversity is incredibly important as a result.
 
 5. **Progressive search path**
    - Start with simple, classical, interpretable approaches.
+     - Simple regressions, classifications, random forests, simple GANs, single head attentions if you need to and progress.
+     - The skill we build should have a progression function.
    - Only move toward more complex models when simple baselines stop improving.
-   - Maintain a clear record of why complexity was introduced.
+     - There should be a clear mechanism for determining how you should improve.
+   - Maintain a clear record of why complexity was introduced and how to reverse your way out of it when you are hitting a local maxima.
 
 6. **Persistent autonomous loop**
    - The agent should not stop after one experiment.
    - A wrapper should repeatedly invoke or resume the agent.
+     - It should be scoped to only do work with Codex to start given third party usage is counted against baseline limits.
+     - There should be messages like "Keep reviewing the autoresearch skill and loop on additional work and testing."
+     - This message can be purely deterministic until a human interrupts it's work.
    - The agent should read outputs, diagnose failures, generate the next candidate, and keep looping.
+     - Graphs and loss curves are highly encouraged to look at and ingested, and replay sessions should be deduced at pretty in depth levels as well.
 
 ---
 
 ## Mental Model
 
+Inspired by `karpathy/autoresearch`, but shaped for a frozen evaluator and a file-backed experiment tree:
+
 ```text
-program.md        = operating manual / lightweight skill
-strategy.py       = editable candidate surface
-evaluator.py      = frozen evaluation harness
-data/             = frozen train/validation/holdout sets
-results.tsv       = experiment ledger
-ideas.md          = candidate backlog and branch notes
-best/             = current best-so-far implementation
-runs/             = logs and artifacts
-agent_loop.sh     = durable external loop around the coding agent
+skills/autoresearch = skill breakdown for how to run autoresearch
+strategy.py         = editable candidate surface
+evaluator.py        = frozen evaluation harness
+data/               = frozen train / validation / holdout jsonl datasets
+results.tsv         = experiment ledger
+ideas.md            = running idea log, branch notes, and high-level results
+best/               = current best-so-far implementation
+runs/               = file-tree of experiment branches, versions, logs, plots, and findings
+scripts/verify.sh   = shell entrypoint for one complete evaluation loop
+pr                  = external Ralph loop around Codex
 ```
 
 The coding agent is not the source of truth. The harness is.
 
 The agent proposes mutations. The evaluator decides whether the mutation helped.
+
+Every experiment must be reproducible from the files it leaves behind: candidate Python, frozen evaluator command, metrics, graphs, and a short human-readable README. Hyperparameter tuning stays inside the current run branch. Structural architecture changes create a new branch folder. Completely different ideas should step back up the tree and start from a different branch or from the root.
 
 ---
 
@@ -79,43 +100,65 @@ The agent proposes mutations. The evaluator decides whether the mutation helped.
 
 ```text
 agentic-experiments/
-  program.md
   README.md
+  architecture.md
 
-  src/
-    strategy.py                 # editable by agent
-    features.py                 # optionally editable
-    models.py                   # optionally editable
-    config.py                   # editable only if allowed
+  skills/
+    autoresearch/
+      SKILL.md                  # how the agent runs the loop
 
-  harness/
-    evaluator.py                # frozen
-    replay.py                   # frozen
-    metrics.py                  # frozen
-    data_splits.py              # frozen
-    scoring.py                  # frozen
+  strategy.py                   # editable candidate surface
+  features.py                   # optionally editable
+  models.py                     # optionally editable
+  config.py                     # editable only if allowed
+
+  evaluator.py                  # frozen
+  replay.py                     # frozen
+  metrics.py                    # frozen
+  scoring.py                    # frozen
+
+  results.tsv                   # append-only experiment ledger
+  ideas.md                      # running backlog and high-level results
+  evaluator_issues.md           # notes if the frozen harness looks wrong
 
   data/
-    train/
-    validation/
-    holdout/
-    stress/
-    metadata.json
-
-  experiments/
-    results.tsv
-    ideas.md
-    leaderboard.md
-    failed_experiments.md
+    README.md
+    manifest.json
+    train.jsonl
+    validation.jsonl
+    holdout.jsonl
+    stress.jsonl
 
   runs/
-    000001/
-      run.log
-      metrics.json
-      plots/
-      artifacts/
+    heuristic_spread/           # experiment type / idea branch
+      README.md                 # findings and best hyperparameters for this branch
+      001_baseline/
+        candidate.py
+        config.json
+        run.log
+        metrics.json
+        plots/
+          loss_curve.png
+          score_curve.png
+      002_wider_spread/
+        candidate.py
+        config.json
+        run.log
+        metrics.json
+        plots/
+          loss_curve.png
+          score_curve.png
+    learned_fill_model/         # new structural branch
+      README.md
+      001_logistic_fill/
+        candidate.py
+        config.json
+        run.log
+        metrics.json
+        plots/
 
   scripts/
+    verify.sh
     run_experiment.sh
     run_parallel_candidates.sh
     agent_loop.sh
@@ -141,10 +184,10 @@ data_splits.py     = train / validation / holdout market-date splits
 The agent may modify:
 
 ```text
-src/strategy.py
-src/features.py
-src/models.py
-src/config.py, if explicitly allowed
+strategy.py
+features.py
+models.py
+config.py, if explicitly allowed
 ```
 
 For DKEX pricing, this includes:
@@ -168,11 +211,10 @@ simple learned pricing models
 The agent may not modify:
 
 ```text
-harness/evaluator.py
-harness/replay.py
-harness/metrics.py
-harness/scoring.py
-harness/data_splits.py
+evaluator.py
+replay.py
+metrics.py
+scoring.py
 data/
 scripts/compare_results.py
 ```
@@ -191,13 +233,82 @@ scoring weights
 risk penalties
 ```
 
-If the agent believes the evaluator is wrong, it should write a note in `experiments/evaluator_issues.md`, not edit the evaluator.
+If the agent believes the evaluator is wrong, it should write a note in `evaluator_issues.md`, not edit the evaluator.
+
+---
+
+## Run Tree Discipline
+
+`runs/` is a tree of experiment branches, not a bag of logs.
+
+The top-level folder is the kind of experiment or architectural idea:
+
+```text
+runs/
+  fixed_spread/
+  volatility_adjusted_spread/
+  inventory_skew/
+  learned_fill_model/
+  sequence_model/
+```
+
+Inside that folder, each numbered child is one runnable experiment variant:
+
+```text
+runs/inventory_skew/
+  README.md
+  001_linear_skew/
+  002_stronger_skew/
+  003_skew_with_volatility_gate/
+```
+
+Each numbered run must include:
+
+```text
+candidate.py        = exact Python candidate that was evaluated
+config.json         = hyperparameters and dataset split references
+run.log             = raw execution log
+metrics.json        = frozen evaluator output
+plots/              = generated graphs, including loss / score curves where applicable
+README.md           = short finding, accept/reject call, and next idea
+```
+
+The branch-level `README.md` should summarize the most interesting result in that folder, including the strongest hyperparameters and why they mattered.
+
+Use the same folder when only hyperparameters change. Create a new top-level folder when the model architecture or search direction changes. If a candidate is unrelated to the current thread, step back to the nearest shared parent or create a new root-level branch under `runs/`.
+
+`ideas.md` should stay append-only and should record:
+
+```text
+idea id
+run folder
+hypothesis
+status
+best observed score
+interesting hyperparameters
+high-level result
+next branch to try
+```
 
 ---
 
 ## Evaluation Harness
 
 The evaluation harness should produce a single primary score plus a set of diagnostic metrics.
+
+`evaluator.py` should be structured enough that the frozen boundary is obvious:
+
+```text
+load_manifest()
+load_split(split_name)
+run_replay(candidate, dataset)
+compute_metrics(events)
+compute_primary_score(metrics)
+write_artifacts(run_dir)
+main()
+```
+
+The evaluator owns dataset loading, split selection, replay, scoring, artifact writing, and guardrail failures. Candidate code should only expose the strategy interface.
 
 ### Primary score
 
@@ -276,6 +387,20 @@ validation  = used for accept/reject
 holdout     = rarely used, final check only
 stress      = adversarial or weird regimes
 ```
+
+Keep the data directory explicit and boring:
+
+```text
+data/
+  README.md
+  manifest.json
+  train.jsonl
+  validation.jsonl
+  holdout.jsonl
+  stress.jsonl
+```
+
+`manifest.json` should define split names, schema version, row counts, source notes, allowed evaluator modes, and any immutable assumptions. `README.md` should explain the fields at a human level. The agent may read these files but may not edit them.
 
 For DKEX:
 
@@ -382,9 +507,13 @@ Each branch gets:
 
 ```text
 one candidate idea
-one run directory
+one run tree folder
+one numbered run directory per variant
+one candidate.py per run
+one plots/ directory per run
 one metrics.json
 one log
+one readable README
 one row in results.tsv
 ```
 
@@ -449,6 +578,16 @@ remove one feature from learned model
 ```
 
 Ablations are critical because coding agents will otherwise accumulate complexity that appears useful but is not.
+
+Branching in `runs/` should mirror this discipline:
+
+```text
+runs/best/
+runs/exploration/<idea_name>/
+runs/ablation/<component_name>/
+```
+
+Do not keep hill-climbing inside a dead branch indefinitely. If the results say the current architecture has plateaued, walk back up the tree, pick another promising branch from `ideas.md`, or start a new root-level idea.
 
 ---
 
@@ -604,7 +743,28 @@ For a market maker, a complex model that cannot run safely in the hot path is no
 
 The markdown instruction alone is not enough. Many coding agents eventually stop.
 
-Use an external loop.
+Use an external loop, and keep a one-command verification path.
+
+### Verification script
+
+Every candidate should be runnable through the same shell entrypoint:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUN_DIR="${1:?usage: scripts/verify.sh <run-dir>}"
+CANDIDATE="${RUN_DIR}/candidate.py"
+
+test -f "$CANDIDATE"
+python evaluator.py \
+  --candidate "$CANDIDATE" \
+  --data-manifest data/manifest.json \
+  --splits train,validation \
+  --run-dir "$RUN_DIR"
+```
+
+The agent loop may wrap this script, but it should not invent a separate verification path per experiment.
 
 ### Simple shell loop
 
@@ -614,7 +774,7 @@ set -euo pipefail
 
 while true; do
   codex exec \
-    "Read program.md. Run the next experiment cycle. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
+    "Read skills/autoresearch/SKILL.md, ideas.md, results.tsv, and the current runs tree. Run the next experiment cycle. Use scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
     2>&1 | tee -a runs/agent.log
 
   sleep 1
@@ -633,7 +793,7 @@ SESSION_ID="${1:?usage: agent_loop.sh <session_id>}"
 
 while true; do
   codex exec resume "$SESSION_ID" \
-    "Continue from the last state. Run the next experiment in program.md. If an experiment completed, inspect results, log it, accept/reject it, and start the next one." \
+    "Continue from the last state. Run the next experiment from skills/autoresearch/SKILL.md. Use scripts/verify.sh. If an experiment completed, inspect results, plots, README findings, and metrics; log it, accept/reject it, and start the next one." \
     2>&1 | tee -a runs/agent.log
 
   sleep 1
@@ -672,11 +832,11 @@ Otherwise it should keep generating and testing candidates.
 
 ---
 
-## `program.md` Template
+## `skills/autoresearch/SKILL.md` Template
 
 The following is the lightweight skill given to the coding agent.
 
-```md
+````md
 # Program
 
 You are an autonomous ML experimentation agent.
@@ -693,38 +853,41 @@ Lower-level metrics matter only insofar as they improve robust performance and d
 
 You may edit:
 
-- `src/strategy.py`
-- `src/features.py`
-- `src/models.py`
-- `src/config.py`
+- `strategy.py`
+- `features.py`
+- `models.py`
+- `config.py`
 
 You may not edit:
 
-- `harness/`
+- `evaluator.py`
+- `replay.py`
+- `metrics.py`
+- `scoring.py`
 - `data/`
 - `scripts/compare_results.py`
-- existing rows in `experiments/results.tsv`
+- existing rows in `results.tsv`
 
 ## Required loop
 
 Repeat forever:
 
-1. Inspect `experiments/results.tsv`, `experiments/ideas.md`, and the current best implementation.
+1. Inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
 2. Choose one candidate idea.
-3. Create a short experiment note.
+3. Choose the correct run branch folder, or create a new one if this is a structural change.
 4. Edit only allowed files.
-5. Commit the candidate.
+5. Copy the evaluated candidate into a numbered `runs/<branch>/<NNN_name>/candidate.py`.
 6. Run:
 
    ```bash
-   scripts/run_experiment.sh
+   scripts/verify.sh runs/<branch>/<NNN_name>
    ```
 
-7. Read `runs/latest/metrics.json` and `runs/latest/run.log`.
-8. Append one row to `experiments/results.tsv`.
+7. Read `metrics.json`, `run.log`, generated plots, and the run README.
+8. Append one row to `results.tsv`.
 9. If validation `primary_score` improved and guardrails passed, keep the commit and mark it accepted.
 10. If not, reset to the previous best commit and mark it rejected.
-11. Generate the next candidate idea.
+11. Update `ideas.md` with the high-level result and next branch to try.
 12. Start the next experiment.
 
 Do not stop after one experiment.
@@ -745,7 +908,7 @@ Reject any candidate with:
 
 ## Experiment row format
 
-Append to `experiments/results.tsv`:
+Append to `results.tsv`:
 
 ```tsv
 timestamp commit branch idea_id status primary_score net_pnl max_drawdown inventory_max_abs adverse_selection_bps quote_uptime_pct notes
@@ -780,7 +943,7 @@ NEEDED: <specific human action>
 ```
 
 Otherwise continue looping.
-```
+````
 
 ---
 
@@ -919,7 +1082,7 @@ one frozen replay evaluator
 one train/validation split
 one scalar primary score
 one results.tsv
-one program.md
+one `skills/autoresearch/SKILL.md`
 one loop script
 ```
 
