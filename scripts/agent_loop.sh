@@ -12,7 +12,7 @@ if ! command -v codex >/dev/null 2>&1; then
   exit 127
 fi
 
-PROMPT="Read problem.md, architecture.md, and skills/autoresearch/SKILL.md. Run autoresearch index, inspect ideas.md, results.tsv, and the current runs tree. Create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it."
+PROMPT="Read problem.md, architecture.md, and skills/autoresearch/SKILL.md. First do an interrupt/recovery scan: run autoresearch index, inspect results.tsv, ideas.md, best/README.md, and the current runs tree; find runs that were created but not verified, verified but not logged, or logged but not summarized. Continue the most recent useful unfinished run before creating anything new. If no unfinished run exists, create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not use scripts/new-experiment. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it."
 
 usage() {
   cat <<'EOF'

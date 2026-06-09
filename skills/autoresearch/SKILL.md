@@ -31,10 +31,27 @@ Start every session by building a current map:
 1. Read `problem.md`.
 2. Run `autoresearch index --status active`.
 3. Inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
-4. Open the most relevant recent run README, `metrics.json`, `run.log`, and plots.
-5. Decide whether to continue the current branch, walk back up the run tree, or start a new branch.
+4. Find existing run folders whose status is `created`, `running`, missing from `results.tsv`, missing `metrics.json`, or missing a clear README result.
+5. Open the most relevant recent run README, `metrics.json`, `run.log`, and plots.
+6. Decide whether to finish an existing run, continue the current branch, walk back up the run tree, or start a new branch.
 
 Do not start by editing code. Let the run history and evaluator output tell you where the signal is.
+
+## Resume And Interrupt Recovery
+
+When a session is resumed, interrupted, killed, or restarted in a new Codex UI, do a recovery scan before creating anything new.
+
+Recovery scan:
+
+1. Run `autoresearch index --status active`.
+2. Read `results.tsv`, `ideas.md`, `best/README.md`, and all branch README front matter under `runs/`.
+3. List recent numbered run directories with `candidate.py`, `config.json`, `README.md`, `metrics.json`, and `run.log` when present.
+4. Identify runs that were created but not verified, verified but not logged, logged but not summarized, or branches that were started and abandoned mid-thought.
+5. Continue the most recent useful unfinished run before creating a new branch.
+
+Do not duplicate work because the prior Codex thread was interrupted. Do not create a new branch just to recover context. Continue progress from the files already on disk unless the existing branch is clearly plateaued, failed, or architecturally wrong.
+
+If the previous run created local experiment artifacts, treat those artifacts as the source of truth for recovery. Read them, summarize what happened, and either finish verification/logging or mark the branch rejected/archived before moving on.
 
 ## Editable Files
 
@@ -61,17 +78,19 @@ If the evaluator, scoring config, or dataset construction appears wrong, write t
 Repeat this loop until blocked or plateaued:
 
 1. Choose one candidate idea from `ideas.md`, the latest run findings, or an obvious next ablation.
-2. Choose the correct run branch folder.
-3. Create a new branch folder only for structural architecture changes.
-4. For a completely different idea, step back up the tree and choose another branch or create a new root branch under `runs/`.
-5. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>`.
-6. Edit only the marked `predict(row)` function in the generated `candidate.py`, unless the experiment explicitly requires a broader candidate-local change.
-7. Run `scripts/verify.sh runs/<branch>/<NNN_name>`.
-8. Read `metrics.json`, `run.log`, generated plots, and the run README.
-9. Append one row to `results.tsv`.
-10. Update run README front matter and findings with the status and what was learned.
-11. Update `ideas.md` with the high-level result and next branch to try.
-12. Continue to the next experiment.
+2. If an unfinished run already exists, continue that run instead of creating another one.
+3. Choose the correct run branch folder.
+4. Create a new branch folder only for structural architecture changes.
+5. For a completely different idea, step back up the tree and choose another branch or create a new root branch under `runs/`.
+6. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>`.
+7. If `new-experiment` is unavailable, run `autoresearch new-experiment <short_name> --idea-id <idea_id>` from the branch directory. Do not call `scripts/new-experiment`; that wrapper is intentionally not part of the slim command surface.
+8. Edit only the marked `predict(row)` function in the generated `candidate.py`, unless the experiment explicitly requires a broader candidate-local change.
+9. Run `scripts/verify.sh runs/<branch>/<NNN_name>`.
+10. Read `metrics.json`, `run.log`, generated plots, and the run README.
+11. Append one row to `results.tsv`.
+12. Update run README front matter and findings with the status and what was learned.
+13. Update `ideas.md` with the high-level result and next branch to try.
+14. Continue to the next experiment.
 
 Do not stop after one experiment if the harness is still producing useful signal.
 
