@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +48,37 @@ def monitor(
     from .monitor import render_monitor
 
     render_monitor(watch=watch, interval=interval)
+
+
+@app.command()
+def nudge(
+    message: Optional[str] = typer.Argument(None, help="Instruction to append for the next agent loop turn."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", exists=True, help="Read the instruction from a file."),
+    clear: bool = typer.Option(False, "--clear", help="Clear pending nudges before writing the new one."),
+) -> None:
+    """Append a human instruction for future loop iterations to read."""
+    root = find_repo_root()
+    inbox = root / "runs/agent/inbox.md"
+    inbox.parent.mkdir(parents=True, exist_ok=True)
+    if clear:
+        inbox.write_text("", encoding="utf-8")
+    chunks: list[str] = []
+    if file:
+        chunks.append(file.read_text(encoding="utf-8").strip())
+    if message:
+        chunks.append(message.strip())
+    if not chunks:
+        console.print(f"[bold]{inbox.relative_to(root)}[/bold]")
+        if inbox.exists() and inbox.read_text(encoding="utf-8").strip():
+            console.print(inbox.read_text(encoding="utf-8"))
+        else:
+            console.print("[dim]No pending nudges.[/dim]")
+        return
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entry = "\n\n".join(chunk for chunk in chunks if chunk)
+    with inbox.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n\n## {timestamp}\n\n{entry}\n")
+    console.print(f"[green]Wrote nudge to {inbox.relative_to(root)}[/green]")
 
 
 @app.command()

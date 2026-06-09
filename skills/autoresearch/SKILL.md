@@ -53,6 +53,14 @@ Do not duplicate work because the prior Codex thread was interrupted. Do not cre
 
 If the previous run created local experiment artifacts, treat those artifacts as the source of truth for recovery. Read them, summarize what happened, and either finish verification/logging or mark the branch rejected/archived before moving on.
 
+## Human Nudges
+
+Before starting or continuing an experiment, read `runs/agent/inbox.md` if it exists. Treat it as the latest human steering layered on top of this skill, `problem.md`, and `architecture.md`.
+
+Nudges may tell you to pause a branch, run a holdout/stress check, stop adding complexity, investigate a suspicious result, or summarize the current state. Apply the nudge to the next concrete action. Do not ignore it because an older branch plan says otherwise.
+
+If a nudge conflicts with the frozen evaluator, data-leak rules, or editable-file boundary, follow the harness guardrails and report the conflict.
+
 ## Editable Files
 
 You may edit:
@@ -215,6 +223,20 @@ Useful plateau signals:
 - complexity rises faster than score
 
 When a branch plateaus, summarize the evidence in the branch README, mark the branch `archived` if appropriate, and walk back up the run tree to a different branch or root-level idea.
+
+## Anti-Overfit Example
+
+If the current best is driven by increasingly narrow validation-selected clauses, treat it as suspicious until stress, holdout, or a resplit confirms it.
+
+Example pattern:
+
+- baseline mode vote is `0.5769`
+- current best rises to `0.7692`
+- validation has only 26 rows
+- the candidate adds clauses like Genetics/Molecular Biology with model 2, Organic Chemistry with model 3, and Chemistry (general) with model 4
+- train accuracy remains below the mode baseline while validation keeps improving
+
+That pattern may be a real dataset insight, but it is also a classic validation-hillclimbing risk. Stop adding more subject/model clauses. Summarize the risk, run stress/holdout or a different split if allowed, or archive the branch and move to a broader idea.
 
 ## Blocking
 

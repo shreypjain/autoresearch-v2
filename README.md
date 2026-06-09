@@ -59,6 +59,14 @@ autoresearch monitor --watch
 Show the active session, what it is trying to accomplish, unfinished runs, current best scores, and summary stats.
 
 ```bash
+autoresearch nudge "Stop adding validation-selected clauses; run stress or holdout before trusting the current best."
+autoresearch nudge --file note.md
+autoresearch nudge --clear "New instruction"
+```
+
+Append a human instruction to `runs/agent/inbox.md`. Future loop turns and restarted `autoresearch loop --ui` sessions read it as the latest steering. For an already-running classic Codex UI session, restart/resume the session so the prompt includes the new inbox content.
+
+```bash
 autoresearch index
 autoresearch index --status active
 autoresearch verify runs/baseline_classifier/001_baseline
