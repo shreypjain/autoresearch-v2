@@ -4,7 +4,7 @@
 
 This document defines a lightweight harness for using coding agents to rapidly improve ML-driven or algorithmic systems through controlled experimentation.
 
-The motivating example is `prcm-dkex`: improving the pricing algorithm for a DKEX market-making system. The same structure should generalize to other ML, simulation, ranking, forecasting, optimization, and strategy-search problems.
+The intended use is improving an ML model, scoring function, ranking system, forecasting model, optimizer, or algorithmic policy against a fixed evaluation harness.
 
 The core idea is:
 
@@ -32,7 +32,7 @@ This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM 
 
 2. **Strong evaluation boundaries**
    - Agents may edit the candidate surface.
-   - Agents may not edit the evaluator / evaluation harness, holdout data, scoring rules, or replay construction.
+   - Agents may not edit the evaluator / evaluation harness, holdout data, scoring rules, or dataset construction.
    - The harness must prevent reward hacking wherever possible.
      - Important to generate adversarial tests to mitigate against this.
 
@@ -45,7 +45,7 @@ This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM 
      - There should be high level descriptions alongside `name`, `description`, and `tags` when describing these files (like YAML file for skills `name` and `description` tags).
 
 4. **Generalized beyond LLMs**
-   - Works for pricing algorithms, ranking models, feature engineering, forecasting, optimization, RL-like policies, and classical ML.
+   - Works for classification, regression, ranking models, feature engineering, forecasting, optimization, RL-like policies, and classical ML.
    - Does not require transformer training as the starting point. In fact, should be discouraged until upgrades are essential.
    - Prioritize CPU bound smaller models, grow larger as signs of additional train set accuracy continues to go up.
      - The bitter lesson scaling laws can be prioritized here, until it doesn't work and you need to destroy what you do completely.
@@ -67,7 +67,7 @@ This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM 
      - There should be messages like "Keep reviewing the autoresearch skill and loop on additional work and testing."
      - This message can be purely deterministic until a human interrupts it's work.
    - The agent should read outputs, diagnose failures, generate the next candidate, and keep looping.
-     - Graphs and loss curves are highly encouraged to look at and ingested, and replay sessions should be deduced at pretty in depth levels as well.
+     - Graphs, loss curves, logs, and failed validation examples are highly encouraged to inspect and summarize.
 
 ---
 
@@ -77,6 +77,7 @@ Inspired by `karpathy/autoresearch`, but shaped for a frozen evaluator and a fil
 
 ```text
 skills/autoresearch = skill breakdown for how to run autoresearch
+problem.md          = guided problem scope, goal, application, and baseline target
 strategy.py         = editable candidate surface
 evaluator.py        = frozen evaluation harness
 data/               = frozen train / validation / holdout jsonl datasets
@@ -85,14 +86,14 @@ ideas.md            = running idea log, branch notes, and high-level results
 best/               = current best-so-far implementation
 runs/               = file-tree of experiment branches, versions, logs, plots, and findings
 scripts/verify.sh   = shell entrypoint for one complete evaluation loop
-pr                  = external Ralph loop around Codex
+external loop       = repeatable wrapper around the coding agent
 ```
 
-The coding agent is not the source of truth. The harness is.
+The coding agent is built to ingest information and generate candidates and run the evaluation on it. The harness evaluates it's efficacy with its source of truth.
 
-The agent proposes mutations. The evaluator decides whether the mutation helped.
+The agent proposes mutations. The evaluator decides whether the mutation helped and feeds the evaluation results back to the agent to let it decide whether the mutation was useful.
 
-Every experiment must be reproducible from the files it leaves behind: candidate Python, frozen evaluator command, metrics, graphs, and a short human-readable README. Hyperparameter tuning stays inside the current run branch. Structural architecture changes create a new branch folder. Completely different ideas should step back up the tree and start from a different branch or from the root.
+Every experiment must be reproducible from the files it leaves behind: candidate Python, frozen evaluator command, metrics, graphs, and a short human-readable README. Hyperparameter tuning stays inside the current run branch (folder). Structural architecture changes create a new branch folder. Completely different ideas should step back up the tree and start from a different branch that it will work off of or from the root `runs` folder.
 
 ---
 
@@ -102,6 +103,7 @@ Every experiment must be reproducible from the files it leaves behind: candidate
 agentic-experiments/
   README.md
   architecture.md
+  problem.md                    # human-readable problem scope and baseline goal
 
   skills/
     autoresearch/
@@ -112,10 +114,11 @@ agentic-experiments/
   models.py                     # optionally editable
   config.py                     # editable only if allowed
 
-  evaluator.py                  # frozen
-  replay.py                     # frozen
-  metrics.py                    # frozen
-  scoring.py                    # frozen
+  evaluator.py                  # frozen to agent – marked in the skill
+  dataset_loader.py             # frozen to agent – marked in the skill
+  metrics.py                    # frozen to agent – marked in the skill
+  scoring.py                    # frozen to agent – marked in the skill
+  scoring_config.yaml           # frozen selected scorer and prediction schema
 
   results.tsv                   # append-only experiment ledger
   ideas.md                      # running backlog and high-level results
@@ -130,7 +133,7 @@ agentic-experiments/
     stress.jsonl
 
   runs/
-    heuristic_spread/           # experiment type / idea branch
+    baseline_classifier/        # experiment type / idea branch
       README.md                 # findings and best hyperparameters for this branch
       001_baseline/
         candidate.py
@@ -140,7 +143,7 @@ agentic-experiments/
         plots/
           loss_curve.png
           score_curve.png
-      002_wider_spread/
+      002_threshold_tuning/
         candidate.py
         config.json
         run.log
@@ -148,16 +151,19 @@ agentic-experiments/
         plots/
           loss_curve.png
           score_curve.png
-    learned_fill_model/         # new structural branch
+    feature_engineering/        # new structural branch
       README.md
-      001_logistic_fill/
+      001_add_text_features/
         candidate.py
         config.json
         run.log
         metrics.json
         plots/
+          loss_curve.png
+          score_curve.png
 
   scripts/
+    new_experiment.py
     verify.sh
     run_experiment.sh
     run_parallel_candidates.sh
@@ -165,15 +171,85 @@ agentic-experiments/
     compare_results.py
 ```
 
-For `prcm-dkex`, the equivalent would be:
+---
 
-```text
-strategy.py        = quote pricing algorithm
-replay.py          = historical book / trade / order replay
-evaluator.py       = fixed market-making simulator
-metrics.py         = PnL, drawdown, adverse selection, fill quality, inventory risk
-data_splits.py     = train / validation / holdout market-date splits
+## Problem Scope Document
+
+Every project should include a guided `problem.md` before agents begin experimenting.
+
+This file describes what problem the loop is trying to solve, where the winning candidate is expected to be used, what counts as a useful baseline, and which constraints matter outside the evaluator. It gives the agent enough product and domain context to generate relevant ideas without making the evaluator editable.
+
+`problem.md` should be human-readable, but structured enough that an agent can skim it quickly:
+
+```md
+---
+name: example_classification_task
+kind: problem_scope
+status: active
+primary_metric: validation_accuracy
+baseline_goal: beat_majority_class_baseline
+target_application: batch_decision_support
+owner: human
+---
+
+# Problem
+
+Describe the real-world problem in plain language.
+
+## Goal
+
+State the measurable objective the research loop should improve.
+
+Example: improve validation accuracy over the baseline while preserving schema validity, runtime limits, and holdout discipline.
+
+## Eventual Application
+
+Describe where the winning candidate will be used:
+
+- offline batch scoring
+- online prediction endpoint
+- ranking pipeline
+- forecasting job
+- optimization routine
+- human decision-support workflow
+
+## Baseline Goal
+
+Define the first useful bar to clear:
+
+- majority-class baseline
+- simple threshold rule
+- linear model
+- existing production heuristic
+- previous best run in `best/`
+
+## Inputs and Outputs
+
+Summarize the dataset rows the candidate receives and the prediction record it must emit. Link to `data/README.md` and `scoring_config.yaml` for exact schemas.
+
+## Constraints
+
+List practical constraints:
+
+- runtime budget
+- memory budget
+- allowed dependencies
+- interpretability needs
+- production feature availability
+- privacy or data-use restrictions
+
+## Non-Goals
+
+Name ideas the agent should avoid unless a human changes the scope.
+
+## Useful Starting Ideas
+
+Seed the initial backlog with a few plausible branches.
 ```
+
+The agent should treat `problem.md` as guidance, not as scoring authority. The evaluator, scoring config, and datasets remain the source of truth for accept/reject decisions.
+
+The baseline goal in `problem.md` should be intentionally modest. It is not the final ambition; it is the first sanity check that the harness, schema, scoring, and experiment generator are all working.
 
 ---
 
@@ -181,7 +257,7 @@ data_splits.py     = train / validation / holdout market-date splits
 
 ### Editable by the agent
 
-The agent may modify:
+The agent has strict scope on what it can modify:
 
 ```text
 strategy.py
@@ -190,50 +266,21 @@ models.py
 config.py, if explicitly allowed
 ```
 
-For DKEX pricing, this includes:
-
-```text
-midprice estimation
-spread logic
-skew logic
-inventory adjustment
-volatility adjustment
-market regime features
-fill-probability estimates
-adverse-selection avoidance
-cancel/replace thresholds
-stale-book behavior
-simple learned pricing models
-```
-
 ### Frozen / not editable by the agent
 
 The agent may not modify:
 
 ```text
 evaluator.py
-replay.py
+dataset_loader.py
 metrics.py
 scoring.py
+scoring_config.yaml
 data/
 scripts/compare_results.py
 ```
 
-For DKEX, the agent must not alter:
-
-```text
-historical replay data
-train/validation/holdout splits
-fee assumptions
-latency assumptions
-fill simulation rules
-slippage assumptions
-market close / suspend rules
-scoring weights
-risk penalties
-```
-
-If the agent believes the evaluator is wrong, it should write a note in `evaluator_issues.md`, not edit the evaluator.
+If the agent believes the evaluator is wrong, it should write a note in `evaluator_issues.md`, not edit the evaluator. The agent can pick this up, temporarily unlock the issues with the evaluator (with a human's notice by terminating execution of the loop) and then wait for how to address and edit that while a human is actively in the loop.
 
 ---
 
@@ -245,21 +292,21 @@ The top-level folder is the kind of experiment or architectural idea:
 
 ```text
 runs/
-  fixed_spread/
-  volatility_adjusted_spread/
-  inventory_skew/
-  learned_fill_model/
+  baseline_classifier/
+  threshold_tuning/
+  feature_engineering/
+  calibrated_model/
   sequence_model/
 ```
 
 Inside that folder, each numbered child is one runnable experiment variant:
 
 ```text
-runs/inventory_skew/
+runs/threshold_tuning/
   README.md
-  001_linear_skew/
-  002_stronger_skew/
-  003_skew_with_volatility_gate/
+  001_default_threshold/
+  002_lower_threshold/
+  003_calibrated_threshold/
 ```
 
 Each numbered run must include:
@@ -270,7 +317,7 @@ config.json         = hyperparameters and dataset split references
 run.log             = raw execution log
 metrics.json        = frozen evaluator output
 plots/              = generated graphs, including loss / score curves where applicable
-README.md           = short finding, accept/reject call, and next idea
+README.md           = short finding, accept/reject call, and potential follow up candidates
 ```
 
 The branch-level `README.md` should summarize the most interesting result in that folder, including the strongest hyperparameters and why they mattered.
@@ -281,99 +328,322 @@ Use the same folder when only hyperparameters change. Create a new top-level fol
 
 ```text
 idea id
-run folder
+run folder path
 hypothesis
 status
 best observed score
-interesting hyperparameters
+interesting hyperparameters tuned
 high-level result
 next branch to try
 ```
 
 ---
 
+## Experiment Generator
+
+Agents should not create experiment files by hand.
+
+Use a terminal command, analogous to a database migration generator, from inside the experiment branch directory. It creates the next numbered experiment folder in the current directory with the evaluation wiring already in place:
+
+```bash
+cd runs/threshold_tuning
+new-experiment calibrated_threshold --idea-id IDEA-014
+```
+
+The command should create:
+
+```text
+runs/threshold_tuning/
+  README.md
+  001_default_threshold/
+  002_lower_threshold/
+  003_calibrated_threshold/
+    README.md
+    candidate.py
+    config.json
+    run.log
+    metrics.json
+    plots/
+```
+
+The command infers the branch from the current directory, finds the highest existing numeric prefix, increments it, and writes the new folder beside the previous experiments. A repo-root script can still back the command, but the human and agent interface should feel like this:
+
+```bash
+cd runs/<branch>
+new-experiment <short_name> --idea-id <idea_id>
+```
+
+For root-level architectural branches, create the branch folder first, then run the generator inside it:
+
+```bash
+mkdir -p runs/feature_engineering
+cd runs/feature_engineering
+new-experiment add_text_features --idea-id IDEA-021 --root
+```
+
+The generated `candidate.py` should include all imports, evaluator adapter code, schema references, and scoring hooks. The agent should only edit one clearly marked function:
+
+```python
+def predict(row: dict) -> dict:
+    """Return one schema-valid prediction for one dataset row."""
+    # Agent edits only this function.
+    return {
+        "id": row["id"],
+        "predicted_label": "accept",
+        "confidence": 0.5,
+    }
+```
+
+Everything outside `predict()` is boilerplate owned by the generator:
+
+```text
+load scoring_config.yaml
+load prediction schema metadata
+adapt evaluator row input into predict(row)
+validate local output shape before evaluator submission
+emit structured predictions for train / validation
+write candidate metadata for the run
+```
+
+The generated `config.json` should point at the frozen scorer and schema:
+
+```json
+{
+  "idea_id": "IDEA-014",
+  "branch": "threshold_tuning",
+  "run_name": "003_calibrated_threshold",
+  "parent": "runs/threshold_tuning/002_lower_threshold",
+  "created_from_directory": "runs/threshold_tuning",
+  "scoring_config": "scoring_config.yaml",
+  "primary_scorer": "accuracy",
+  "prediction_schema": "scoring_config.yaml:prediction_schema",
+  "splits": ["train", "validation"]
+}
+```
+
+The generated `README.md` should include parseable front matter immediately:
+
+```yaml
+---
+name: 003_calibrated_threshold
+kind: experiment_run
+status: created
+parent: runs/threshold_tuning/002_lower_threshold
+idea_id: IDEA-014
+primary_scorer: accuracy
+prediction_schema: scoring_config.yaml:prediction_schema
+tags:
+  - threshold
+  - hyperparameter_sweep
+summary: Created from IDEA-014. Awaiting first verification run.
+next:
+  - Edit only predict(row) in candidate.py.
+  - Run scripts/verify.sh runs/threshold_tuning/003_calibrated_threshold.
+---
+```
+
+The generator should refuse to run if:
+
+```text
+scoring_config.yaml is missing
+prediction_schema is missing
+the current directory is not inside runs/
+the next numeric run directory already exists
+there is no previous run and --root is not explicitly passed
+the command would create files outside the current branch folder
+```
+
+This keeps experiment creation boring and repeatable. The creative surface is one function; the harness, schema, scorer, metadata, and directory shape are created deterministically.
+
+---
+
+## README Front Matter Index
+
+Every `README.md` inside of `/runs` should start with YAML front matter that is easy for a CLI to parse.
+
+The front matter is useful for quick traversal layer and function. It lets an agent scan the tree, find stale branches, identify promising runs, and decide where to poke next without rereading every artifact. O(n) max and min look ups across the tree without a sorted replica list of experiments.
+
+Recommended front matter:
+
+```yaml
+---
+name: threshold_tuning
+kind: experiment_branch
+status: active
+parent: baseline_classifier/001_baseline
+best_run: 003_calibrated_threshold
+best_score: 1.184
+best_metric: primary_score
+tags:
+  - threshold
+  - heuristic
+  - hyperparameter_sweep
+summary: Threshold tuning improved validation accuracy until calibration became the limiting factor.
+next:
+  - Test calibrated confidence scores.
+  - Compare against feature_engineering branch.
+---
+```
+
+Use the same shape at different levels:
+
+```text
+README.md                         = project metadata and current best branch
+problem.md                        = problem scope, target application, and baseline goal
+data/README.md                    = dataset schema, split names, and source notes
+runs/<branch>/README.md           = branch hypothesis, status, best run, best hyperparameters
+runs/<branch>/<NNN_name>/README.md = run finding, decision, metrics pointer, next step
+```
+
+The front matter should be useful but not authoritative for scoring. `metrics.json`, `config.json`, `results.tsv`, and the frozen evaluator output remain the source of truth.
+
+Add a walk / traversal command or function in the shell files and scripts:
+
+```bash
+python scripts/readme_index.py --root . --format table
+python scripts/readme_index.py --root . --kind experiment_branch --status active
+python scripts/readme_index.py --root . --format json > runs/readme_index.json
+```
+
+`scripts/readme_index.py` should:
+
+```text
+walk the repo for README.md files
+parse YAML front matter if present
+include README path and containing directory
+emit table, json, or tsv
+support filters for kind, status, tag, and parent
+sort by kind, status, best_score, and updated timestamp when available
+```
+
+This gives the agent a cheap first pass to get up to speed when invoking a new session:
+
+```text
+1. Run `python scripts/readme_index.py --root . --status active`.
+2. Find active branches with no recent accepted run.
+3. Find failed branches with useful next ideas.
+4. Pick the next branch before opening larger logs or plots.
+```
+
+---
+
 ## Evaluation Harness
 
-The evaluation harness should produce a single primary score plus a set of diagnostic metrics.
+The evaluation harness should be able to provide a single primary score plus a set of diagnostic metrics.
 
 `evaluator.py` should be structured enough that the frozen boundary is obvious:
 
 ```text
 load_manifest()
 load_split(split_name)
-run_replay(candidate, dataset)
-compute_metrics(events)
+load_scoring_config()
+load_expected_output_schema()
+run_candidate(candidate, dataset)
+validate_candidate_outputs(predictions, schema)
+compute_metrics(predictions, labels)
 compute_primary_score(metrics)
 write_artifacts(run_dir)
 main()
 ```
 
-The evaluator owns dataset loading, split selection, replay, scoring, artifact writing, and guardrail failures. Candidate code should only expose the strategy interface.
+The evaluator owns dataset loading, split selection (`train`, `validation`, `holdout`, or `stress` as your options), candidate execution, scoring, artifact writing, and guardrail failures. Candidate code should only expose the prediction interface.
 
-### Primary score
+### Prediction Schema and Scoring
 
-The primary score should be a scalar that the agent can optimize.
+Each dataset row should define the fields the candidate must predict or produce. The evaluator validates the candidate output against that expected schema before any scoring happens.
 
-For DKEX pricing, a possible score:
-
-```text
-score =
-  normalized_pnl
-  - inventory_penalty
-  - drawdown_penalty
-  - adverse_selection_penalty
-  - quote_instability_penalty
-  - stale_quote_penalty
-```
-
-The score should reward profit, but not profit alone.
-
-A pricing strategy that makes money by taking extreme inventory risk should lose. A strategy that overfits a replay by quoting unrealistically should lose. A strategy that achieves good PnL but violates operational constraints should lose.
-
-### Required DKEX metrics
-
-Each experiment should report:
+Default behavior:
 
 ```text
-gross_pnl
-net_pnl_after_fees
-max_drawdown
-sharpe_like_score
-inventory_mean_abs
-inventory_max_abs
-fill_count
-maker_fill_ratio
-taker_fill_ratio
-quote_uptime_pct
-cancel_replace_count
-average_spread_bps
-average_edge_bps
-adverse_selection_bps
-stale_quote_count
-crossed_quote_count
-unquotable_market_count
-latency_budget_violations
-risk_limit_violations
-primary_score
+candidate reads one dataset row
+candidate emits one structured prediction record
+evaluator validates the record against the frozen schema
+evaluator scores valid predictions against labels / expected fields
+primary_score defaults to validation accuracy
 ```
 
-### Example `metrics.json`
+The schema should live in frozen harness config, not in editable candidate code:
+
+```yaml
+task: classification
+primary_scorer: accuracy
+prediction_schema:
+  type: object
+  required:
+    - id
+    - predicted_label
+    - confidence
+  properties:
+    id:
+      type: string
+    predicted_label:
+      type: string
+      enum: ["accept", "reject"]
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+```
+
+If a candidate emits the wrong shape, the evaluator should fail before scoring and write a structured validation error:
 
 ```json
 {
-  "run_id": "000042",
-  "commit": "abc1234",
-  "primary_score": 1.184,
-  "net_pnl": 823.15,
-  "max_drawdown": -211.44,
-  "inventory_max_abs": 18,
-  "adverse_selection_bps": -3.7,
-  "quote_uptime_pct": 91.2,
-  "cancel_replace_count": 1849,
-  "risk_limit_violations": 0,
-  "holdout": false
+  "status": "schema_validation_failed",
+  "run_id": "runs/classifier_baseline/004_confidence_head",
+  "expected_schema": "scoring_config.yaml:prediction_schema",
+  "issues": [
+    {
+      "row_id": "validation-0182",
+      "path": "$.predicted_label",
+      "message": "required field missing"
+    },
+    {
+      "row_id": "validation-0187",
+      "path": "$.confidence",
+      "message": "expected number between 0.0 and 1.0, got string"
+    }
+  ]
 }
 ```
+
+This is not a harness failure. It is candidate feedback. The coding agent should read the validation error, fix `strategy.py` / model output formatting, and rerun the same experiment.
+
+### Primary score
+
+The primary score should be a scalar that the agent can optimize after schema validation passes.
+
+Initially, `primary_score` is a decimal between `0.000` and `1.000` representing validation accuracy against the dataset labels.
+
+Other scoring mechanisms are allowed, but they must be selected by frozen harness config, not edited by the experiment agent. This lets the same evaluator support accuracy, balanced accuracy, regression loss, ranking metrics, weighted business metrics, or future reinforcement-learning objectives without letting the agent redefine winning mid-run.
+
+Example:
+
+```yaml
+primary_scorer: accuracy
+available_scorers:
+  accuracy:
+    kind: classification_accuracy
+    split: validation
+  balanced_accuracy:
+    kind: balanced_classification_accuracy
+    split: validation
+  regression_rmse:
+    kind: regression_rmse
+    split: validation
+    maximize: false
+```
+
+The rule is:
+
+```text
+candidate output schema = frozen
+scoring function = frozen
+selected primary scorer = frozen for a run
+candidate implementation = editable
+```
+
+If you change your primary_scorer, that should be cascaded and rerun against the evaluation set and rescored for all experiments. Scorers should have some kind of unique identifier hosted against it so that there can be YAML front matter keys on the exact scorer that it was evaluated against.
 
 ---
 
@@ -388,7 +658,7 @@ holdout     = rarely used, final check only
 stress      = adversarial or weird regimes
 ```
 
-Keep the data directory explicit and boring:
+Keep the data directory explicit, simple, and concise:
 
 ```text
 data/
@@ -402,34 +672,9 @@ data/
 
 `manifest.json` should define split names, schema version, row counts, source notes, allowed evaluator modes, and any immutable assumptions. `README.md` should explain the fields at a human level. The agent may read these files but may not edit them.
 
-For DKEX:
-
-```text
-train:
-  ordinary liquid markets
-  normal pre-game and in-game periods
-  varied but non-extreme examples
-
-validation:
-  different dates, teams, sports, and market types
-  same broad distribution as train
-
-holdout:
-  unseen dates and market types
-  only evaluated after meaningful improvements
-
-stress:
-  suspended markets
-  stale books
-  large spreads
-  sudden odds jumps
-  partial fills while cancel pending
-  disconnect/reconnect periods
-  low-liquidity markets
-  high-volatility late-game periods
-```
-
 The agent should optimize against train and validation. It should not see holdout results on every run, otherwise it will overfit the holdout.
+
+The agent is allowed to comb through the evaluation dataset, but it is not allowed to see or comb through the holdout set. The holdout set should never go in context of the language model, the evaluation dataset can use basic transformation functions to parse through large pieces of data using `pandas` with those transformations sitting inside of scripts. You should do this because some of the datasets you'll wrangle with will be quite large (250k+ rows). Translation to columnar data formats and reads from that might become useful.
 
 Recommended policy:
 
@@ -443,49 +688,35 @@ Run stress every 5 accepted improvements or before merge.
 
 ## Candidate Generation
 
-The agent should not make one random edit at a time forever. It should maintain an idea backlog.
+The agent should not make one random edit at a time forever. It should maintain an idea backlog informed by both the general problem statement and the previous outcomes from ideas and observed outcomes.
 
-Candidate categories:
+Candidate categories (initial):
 
 ```text
 classical heuristic
-feature engineering
+classical polynomial regression
 hyperparameter sweep
 model class change
-risk-control change
+constraint handling change
 regime-specific branch
-latency/performance optimization
+performance optimization
 ablation
 ensemble
 learned component
 ```
 
-For DKEX pricing, initial candidates should start simple:
+Only after those are exhausted should the agent move into heavier learned models and can do research on ArXiv to find additional papers to go model after:
 
 ```text
-fixed spread around mid
-spread widens with volatility
-inventory-skewed mid
-liquidity-aware spread
-fill-probability-aware spread
-adverse-selection-aware skew
-market age / time-to-event adjustment
-sports-specific parameters
-state-dependent quote size
-```
-
-Only after those are exhausted should the agent move into heavier learned models:
-
-```text
-linear regression edge model
-logistic fill model
+linear regression model
+logistic classifier
 gradient boosted trees
 small MLP
-sequence model over book states
-transformer-style model over event/book history
+sequence model over ordered examples
+transformer-style model over structured history
 ```
 
-The system should strongly prefer the simplest strategy that improves the metric.
+The system should strongly prefer the simplest strategy that improves the metric with the greatest model interpretability.
 
 ---
 
@@ -497,10 +728,10 @@ Recommended pattern:
 
 ```text
 main-best
-  branch/candidate-001-inventory-skew
-  branch/candidate-002-vol-adjusted-spread
-  branch/candidate-003-fill-prob-model
-  branch/candidate-004-cancel-threshold
+  branch/candidate-001-threshold-tuning
+  branch/candidate-002-feature-normalization
+  branch/candidate-003-calibrated-classifier
+  branch/candidate-004-tree-model
 ```
 
 Each branch gets:
@@ -558,10 +789,10 @@ Riskier ideas that may fail but can discover new directions.
 Examples:
 
 ```text
-learned fill model
-new volatility estimator
-nonlinear inventory skew
-market-type-specific quoting policy
+calibrated classifier
+new feature transform
+nonlinear decision boundary
+dataset-segment-specific policy
 ```
 
 ### `ablation`
@@ -571,9 +802,9 @@ Remove or isolate a component to understand whether it is actually helping.
 Examples:
 
 ```text
-disable inventory skew
-disable volatility widening
-disable adverse-selection filter
+disable calibration layer
+disable one feature transform
+disable segment-specific rule
 remove one feature from learned model
 ```
 
@@ -609,11 +840,11 @@ run stress check
 Example:
 
 ```text
-inventory_skew = 0.05 improves score
-try 0.075
-try 0.10
-try 0.035
-test with wider base spread
+decision_threshold = 0.55 improves score
+try 0.60
+try 0.65
+try 0.525
+test with calibrated confidence
 ```
 
 ### When a change hurts
@@ -629,8 +860,8 @@ or mark the idea as failed
 Example:
 
 ```text
-wider spreads reduce fills too much
-try conditional widening only during volatility spikes
+lowering the threshold increases false positives too much
+try conditional thresholding only for high-confidence examples
 ```
 
 ### When results are noisy
@@ -639,7 +870,7 @@ If results are noisy:
 
 ```text
 rerun the same commit
-increase replay coverage
+increase evaluation coverage
 compare median score across seeds / shards
 prefer robust improvements over one-off wins
 ```
@@ -658,9 +889,11 @@ large sweep
 
 ## Progression From Classical to Learned Models
 
-The agent should not immediately reach for transformers.
+The agent should not immediately reach for highest and most complex work. Most additional experimentation should be conscious of scaling up cores in the box it's working against.
 
-Recommended progression:
+Also important to start blocking if you can't run additional experiments unless you have a larger box or a GPU. This should inform how you generate candidates.
+
+Recommended progression (can exponentiate through these quickly):
 
 ```text
 1. Fixed heuristic baseline
@@ -668,59 +901,55 @@ Recommended progression:
 3. Feature-conditioned heuristic
 4. Linear model
 5. Tree-based model
-6. Small neural net
+6. Small neural net -> Scaled neural net
 7. Sequence-aware model
 8. Transformer-style architecture
 ```
 
-For DKEX pricing:
-
 ### Stage 1: classical baseline
 
 ```text
-mid = best_bid_ask_mid
-spread = fixed
-size = fixed
-inventory_skew = simple linear adjustment
+predict the majority class, mean value, or simplest valid default
+apply one or two hand-tuned thresholds
+emit schema-valid confidence values
 ```
 
 ### Stage 2: feature-conditioned heuristic
 
 ```text
-spread = base + volatility_component + liquidity_component
-skew = inventory_weight * inventory + adverse_selection_weight * recent_move
-size = base_size adjusted by confidence
+condition decisions on simple, inspectable input fields
+add normalized numeric features
+add basic text or categorical transforms when available
 ```
 
-### Stage 3: learned fill / adverse-selection models
+### Stage 3: learned tabular / text models
 
 Predict:
 
 ```text
-probability_of_fill
-expected_short_term_price_move_after_fill
-expected_edge
+class label, score, ranking position, or regression value
+confidence or uncertainty
+calibration diagnostics
 ```
 
 Use the model to adjust:
 
 ```text
-spread
-skew
-size
-whether to quote
+prediction label
+decision threshold
+confidence
+abstain / fallback behavior
 ```
 
 ### Stage 4: sequence models
 
-Use short book/trade history to estimate:
+Use ordered history or multi-row context only when the dataset actually supports it:
 
 ```text
-microprice
-toxicity
-volatility
-event regime
-fill probability
+recent events
+temporal trend
+group-level context
+prior predictions
 ```
 
 ### Stage 5: transformer-style models
@@ -729,13 +958,13 @@ Only consider this if:
 
 ```text
 classical and small models plateau
-there is enough replay data
+there is enough data
 evaluation is robust
-latency constraints are understood
-the model can be distilled or cached for hot-path use
+runtime constraints are understood
+the model can be served within the intended budget
 ```
 
-For a market maker, a complex model that cannot run safely in the hot path is not a real improvement.
+A complex model that cannot run in the intended environment is not a real improvement.
 
 ---
 
@@ -774,7 +1003,7 @@ set -euo pipefail
 
 while true; do
   codex exec \
-    "Read skills/autoresearch/SKILL.md, ideas.md, results.tsv, and the current runs tree. Run the next experiment cycle. Use scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
+    "Read problem.md and skills/autoresearch/SKILL.md, run scripts/readme_index.py, inspect ideas.md, results.tsv, and the current runs tree. Create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then run scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
     2>&1 | tee -a runs/agent.log
 
   sleep 1
@@ -793,7 +1022,7 @@ SESSION_ID="${1:?usage: agent_loop.sh <session_id>}"
 
 while true; do
   codex exec resume "$SESSION_ID" \
-    "Continue from the last state. Run the next experiment from skills/autoresearch/SKILL.md. Use scripts/verify.sh. If an experiment completed, inspect results, plots, README findings, and metrics; log it, accept/reject it, and start the next one." \
+    "Continue from the last state. Read problem.md, run scripts/readme_index.py, then create the next experiment by cd'ing into the chosen runs/<branch> directory and running new-experiment. Use scripts/verify.sh. If an experiment completed, inspect results, plots, README findings, and metrics; log it, accept/reject it, and start the next one." \
     2>&1 | tee -a runs/agent.log
 
   sleep 1
@@ -834,7 +1063,7 @@ Otherwise it should keep generating and testing candidates.
 
 ## `skills/autoresearch/SKILL.md` Template
 
-The following is the lightweight skill given to the coding agent.
+The following is a heavyweight skill prompt given to the coding agent to guide its decision making and reference material on how to work inside of this repo.
 
 ````md
 # Program
@@ -842,6 +1071,8 @@ The following is the lightweight skill given to the coding agent.
 You are an autonomous ML experimentation agent.
 
 Your job is to improve the primary validation score by proposing, implementing, running, evaluating, and logging experiments.
+
+Before choosing an idea, read `problem.md`. It explains the real problem, the target application, the baseline goal, and constraints that should shape candidate selection.
 
 ## Objective
 
@@ -861,9 +1092,10 @@ You may edit:
 You may not edit:
 
 - `evaluator.py`
-- `replay.py`
+- `dataset_loader.py`
 - `metrics.py`
 - `scoring.py`
+- `scoring_config.yaml`
 - `data/`
 - `scripts/compare_results.py`
 - existing rows in `results.tsv`
@@ -872,11 +1104,11 @@ You may not edit:
 
 Repeat forever:
 
-1. Inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
+1. Read `problem.md`, run `python scripts/readme_index.py --root . --status active`, then inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
 2. Choose one candidate idea.
 3. Choose the correct run branch folder, or create a new one if this is a structural change.
-4. Edit only allowed files.
-5. Copy the evaluated candidate into a numbered `runs/<branch>/<NNN_name>/candidate.py`.
+4. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>` to create the next numbered run directory in that branch.
+5. Edit only the marked `predict(row)` function in the generated `candidate.py`, unless the skill explicitly allows a broader architecture change.
 6. Run:
 
    ```bash
@@ -896,22 +1128,24 @@ Do not stop after one experiment.
 
 Reject any candidate with:
 
-- risk limit violations
-- crossed quotes
-- stale quote violations above threshold
-- worse max drawdown beyond tolerance
-- worse adverse selection beyond tolerance
-- materially lower quote uptime without compensating score improvement
+- schema validation failures that the candidate cannot fix
 - evaluator errors
 - data leakage
 - holdout degradation after holdout check
+- materially worse secondary metrics without compensating primary-score improvement
+- excessive runtime or memory usage
+- unsupported dependencies
+- evaluator errors
+- data leakage
+
+If the evaluator returns `schema_validation_failed`, do not mark it as a scored rejection. Treat it as candidate feedback, fix the output shape in editable code, and rerun the same numbered experiment until it either validates or is abandoned.
 
 ## Experiment row format
 
 Append to `results.tsv`:
 
 ```tsv
-timestamp commit branch idea_id status primary_score net_pnl max_drawdown inventory_max_abs adverse_selection_bps quote_uptime_pct notes
+timestamp commit branch idea_id status primary_score validation_accuracy holdout_score runtime_seconds memory_mb scorer_id notes
 ```
 
 ## Candidate discipline
@@ -929,7 +1163,7 @@ Search order:
 7. sequence model
 8. transformer-style model
 
-Do not introduce a transformer unless simpler models have plateaued and the result can satisfy latency constraints.
+Do not introduce a transformer unless simpler models have plateaued and the result can satisfy runtime and deployment constraints.
 
 ## Stopping
 
@@ -944,85 +1178,6 @@ NEEDED: <specific human action>
 
 Otherwise continue looping.
 ````
-
----
-
-## DKEX-Specific Pricing Harness
-
-For `prcm-dkex`, the first useful target is not a live trading agent.
-
-The first target should be an offline pricing/replay harness.
-
-### Inputs
-
-```text
-market metadata
-order book snapshots
-order book deltas
-trade prints
-market status changes
-fills / simulated fills
-latency assumptions
-fee model
-risk limits
-```
-
-### Strategy API
-
-The editable strategy should expose a small interface:
-
-```python
-class Strategy:
-    def on_market_state(self, state: MarketState) -> QuoteDecision:
-        ...
-```
-
-The output should be:
-
-```python
-@dataclass
-class QuoteDecision:
-    bid_price: float | None
-    ask_price: float | None
-    bid_size: float
-    ask_size: float
-    reason: str
-    confidence: float
-```
-
-The strategy should not know whether it is running on train, validation, or holdout.
-
-### Evaluator responsibilities
-
-The frozen evaluator should:
-
-```text
-replay book state in chronological order
-call strategy on each decision point
-simulate order placement / cancel / fills
-enforce tick sizes and price bands
-enforce maker-only rules
-track positions and PnL
-apply fees
-apply latency assumptions
-penalize stale or crossed quotes
-write metrics.json
-```
-
-### First baseline
-
-Start with an intentionally simple baseline:
-
-```text
-quote around midpoint
-fixed spread
-fixed size
-linear inventory skew
-do not quote stale or suspended markets
-respect tick size and price bands
-```
-
-Then let the agent improve from there.
 
 ---
 
@@ -1051,7 +1206,7 @@ A candidate should be rejected if:
 it improves score by exploiting evaluator weakness
 it increases hidden risk
 it adds large complexity for tiny gain
-it creates hot-path CPU or latency problems
+it creates runtime, memory, or dependency problems
 it requires data unavailable in production
 ```
 
@@ -1062,13 +1217,13 @@ it requires data unavailable in production
 1. Do not run holdout every experiment.
 2. Do not let the agent edit holdout data or scoring.
 3. Keep stress scenarios separate from normal validation.
-4. Prefer improvements that work across market types and dates.
+4. Prefer improvements that work across dataset segments and time periods.
 5. Track complexity cost.
-6. Rerun top candidates on multiple seeds or replay windows.
+6. Rerun top candidates on multiple seeds or evaluation shards.
 7. Use ablations to remove unnecessary complexity.
 8. Require production-feasible features only.
 
-For DKEX, reject any feature that depends on future information or replay-only artifacts.
+Reject any feature that depends on future information, labels, holdout leakage, or evaluator-only artifacts.
 
 ---
 
@@ -1078,9 +1233,10 @@ The minimum useful version requires:
 
 ```text
 one editable strategy file
-one frozen replay evaluator
+one frozen evaluator
 one train/validation split
 one scalar primary score
+one `problem.md`
 one results.tsv
 one `skills/autoresearch/SKILL.md`
 one loop script
@@ -1088,7 +1244,7 @@ one loop script
 
 Do not start by building a giant framework.
 
-Build the smallest thing that lets an agent run 50 experiments safely.
+Build the smallest thing that lets an agent run 25 experiments safely.
 
 ---
 
@@ -1129,7 +1285,7 @@ complexity tracking
 feature store
 linear / tree / small NN models
 model serialization
-latency checks
+runtime checks
 production feature availability checks
 ```
 
@@ -1151,6 +1307,6 @@ The agent should be creative, but the harness should be conservative.
 
 A good harness makes it easy for the agent to discover real improvements and hard for the agent to fake progress.
 
-For DKEX, the goal is not to create an agent that can trade live.
+The goal is to create an agentic research loop that can repeatedly improve a candidate implementation against fixed datasets, schemas, and scoring rules before any idea is considered for production.
 
-The goal is to create an agentic research loop that can repeatedly improve a pricing strategy against fixed replay data, under realistic market-making constraints, before any idea is considered for staging or production.
+Good luck.
