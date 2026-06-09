@@ -7,11 +7,11 @@ current_best: runs/baseline_classifier/001_baseline
 
 # Autoresearch V2
 
-Fork this repo, add your data, and let an agent run schema-checked ML experiments.
+Fork this repo, add your data, and run schema-checked ML experiments with Codex.
 
-The harness owns data loading, validation, scoring, and run logging. The agent edits generated candidates. The evaluator decides what worked.
+The harness owns data loading, validation, scoring, and run logging. The agent proposes candidates. The evaluator decides what worked.
 
-## Start
+## Quickstart
 
 ```bash
 git clone <your-fork-url>
@@ -22,80 +22,94 @@ autoresearch onboard
 autoresearch loop --ui
 ```
 
-Use the `autoresearch` CLI as the primary interface. In each new terminal window, run `source .venv/bin/activate` before calling `autoresearch`. If the command ever fails after local code changes, run `make setup` once; it repairs the venv command shims without reinstalling dependencies unless needed.
+That is the normal path:
 
-`make` is kept as a thin bootstrap/convenience layer for fresh clones and for commands you want to run before activating the venv.
+- `make start` creates the virtualenv, installs the CLI, creates starter files, and verifies the baseline.
+- `autoresearch onboard` guides API key entry, problem scope, data import, label fields, and train/validation/holdout split setup.
+- `autoresearch loop --ui` opens the readable Codex UI with the autoresearch loop prompt injected.
 
-## CLI
-
-```bash
-autoresearch onboard
-```
-
-Guided setup for `.env`, problem scope, data import, labels, split fractions, and baseline verification. If your data is not ready, leave the data-file prompt blank and come back later.
+In every new terminal:
 
 ```bash
-autoresearch loop --ui
+cd autoresearch-v2
+source .venv/bin/activate
+autoresearch monitor
 ```
 
-Open the classic Codex UI with the autoresearch prompt injected. This is the best default while developing because it is readable and steerable.
+If `autoresearch` is missing or stale after local code changes:
 
 ```bash
-autoresearch loop
+make setup
+source .venv/bin/activate
 ```
 
-Run the recursive non-interactive Codex loop. Each iteration writes `runs/agent/<timestamp>/events.jsonl`, `last_message.md`, `stderr.log`, and `session_id.txt`, plus an index at `runs/agent/index.tsv`.
+## Daily Commands
+
+| Command | Use |
+| --- | --- |
+| `autoresearch onboard` | Guided first-time setup. You can leave data blank if it is not ready. |
+| `autoresearch loop --ui` | Start the classic Codex UI with the loop instructions injected. Best default. |
+| `autoresearch loop` | Run the recursive non-interactive loop. |
+| `autoresearch monitor` | See the active session, best score, unfinished runs, and summary stats. |
+| `autoresearch monitor --watch` | Keep the monitor open. |
+| `autoresearch nudge "message"` | Add a human instruction for the next loop turn or restarted UI session. |
+| `autoresearch index` | Traverse run README metadata. |
+| `autoresearch verify <run_dir>` | Run the evaluator for one candidate. |
+| `autoresearch data validate` | Validate data files against the configured contract. |
+| `autoresearch data import <file>` | Import CSV/JSON/JSONL into the repo data layout. |
+| `autoresearch new-experiment <name> --idea-id IDEA-001` | Create the next numbered experiment in the current branch. |
+
+## Steering The Loop
+
+Use `nudge` when the running direction is wrong:
+
+```bash
+autoresearch nudge "Stop adding validation-selected clauses; start a train-fitted model branch or run stress/holdout before trusting this candidate."
+autoresearch nudge --file note.md
+autoresearch nudge --clear "Replace the old steering with this instruction."
+```
+
+Nudges are written to `runs/agent/inbox.md`. The next non-interactive loop turn reads them automatically. If a classic Codex UI session is already open, restart or resume it so the prompt includes the new inbox content.
+
+For session recovery:
 
 ```bash
 autoresearch loop --once
 autoresearch loop --resume <codex-session-id>
 ```
 
-Run one non-interactive iteration, or resume a captured session in the classic UI.
-
-```bash
-autoresearch monitor
-autoresearch monitor --watch
-```
-
-Show the active session, what it is trying to accomplish, unfinished runs, current best scores, and summary stats.
-
-```bash
-autoresearch nudge "Stop adding validation-selected clauses; run stress or holdout before trusting the current best."
-autoresearch nudge --file note.md
-autoresearch nudge --clear "New instruction"
-```
-
-Append a human instruction to `runs/agent/inbox.md`. Future loop turns and restarted `autoresearch loop --ui` sessions read it as the latest steering. For an already-running classic Codex UI session, restart/resume the session so the prompt includes the new inbox content.
-
-```bash
-autoresearch index
-autoresearch index --status active
-autoresearch verify runs/baseline_classifier/001_baseline
-autoresearch data validate
-autoresearch data import ./data.csv --id-field id --label-field label --input-fields text
-autoresearch new-experiment <short_name> --idea-id IDEA-001
-```
-
-Project traversal, evaluation, data validation/import, and run generation.
-
 ## Make Shortcuts
 
+Use `autoresearch` as the primary interface after activation. Use `make` for bootstrap and convenience:
+
 ```bash
-make start          # create .venv, install CLI, verify starter baseline
-make onboard        # same as autoresearch onboard
-make loop-ui        # same as autoresearch loop --ui
-make loop           # same as autoresearch loop
-make monitor        # same as autoresearch monitor
-make monitor-watch  # same as autoresearch monitor --watch
+make start          # first-time setup
+make setup          # repair/install the local CLI shims
+make onboard        # autoresearch onboard
+make loop-ui        # autoresearch loop --ui
+make loop           # autoresearch loop
+make monitor        # autoresearch monitor
+make monitor-watch  # autoresearch monitor --watch
 make test           # smoke-test the harness
 ```
 
-Make shortcuts reuse the existing virtualenv. They should not reinstall dependencies unless `pyproject.toml` changed or the editable install is missing.
+`make monitor` and the other shortcuts reuse the existing virtualenv. They should not reinstall dependencies unless `pyproject.toml` changed or the editable install is missing.
+
+## Experiment Flow
+
+```bash
+autoresearch data import ./data.csv --id-field id --label-field label --input-fields text
+autoresearch data validate
+cd runs/baseline_classifier
+autoresearch new-experiment threshold_tuning --idea-id IDEA-001
+cd ../..
+autoresearch verify runs/baseline_classifier/002_threshold_tuning
+autoresearch monitor
+```
 
 ## Files That Matter
 
-- `problem.md`: human problem scope. Create it once during onboarding.
+- `problem.md`: human problem scope. Create it once during onboarding, then treat scope changes as a new project direction.
 - `data/`: train, validation, holdout, stress, and manifest files.
 - `scoring_config.yaml`: schema and scorer contract.
 - `runs/`: experiment tree and artifacts.
@@ -103,6 +117,8 @@ Make shortcuts reuse the existing virtualenv. They should not reinstall dependen
 - `ideas.md`: backlog and high-level results.
 - `skills/autoresearch/SKILL.md`: agent operating contract.
 - `architecture.md`: deeper rules for maintainers.
+
+Loop artifacts live under `runs/agent/`. Experiment artifacts live under `runs/<branch>/<numbered_experiment>/`.
 
 ## Default Data Shape
 
