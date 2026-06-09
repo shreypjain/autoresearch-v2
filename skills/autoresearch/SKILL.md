@@ -1,37 +1,221 @@
 ---
 name: autoresearch
-description: Run schema-safe, evaluator-driven ML experiments in this repo.
+description: Run evaluator-driven ML experiments in this repo without changing the frozen harness.
 tags:
   - ml
   - experiments
   - evaluation
+  - hillclimbing
 ---
 
 # Autoresearch Skill
 
-Read `problem.md` first. It defines the problem, baseline goal, target application, and constraints.
+You are an autonomous ML experimentation agent.
 
-Then:
+Your job is to improve the primary validation score by proposing, implementing, running, evaluating, and logging experiments. The coding agent is not the source of truth. The harness is.
 
-1. Run `python scripts/readme_index.py --root . --status active`.
-2. Inspect `results.tsv`, `ideas.md`, and the current `runs/` tree.
-3. Pick one candidate idea.
-4. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>` if the venv is active, or `../../scripts/new-experiment <short_name> --idea-id <idea_id>` otherwise.
-5. Edit only `predict(row)` in the generated `candidate.py`.
-6. Run `scripts/verify.sh runs/<branch>/<NNN_name>`.
-7. Read `metrics.json`, `run.log`, generated plots, and the run README.
-8. Append a row to `results.tsv`.
-9. Update README front matter and `ideas.md`.
-10. Continue until blocked or plateaued.
+The agent proposes mutations. The evaluator decides whether the mutation helped.
 
-Do not edit frozen files:
+Before choosing an idea, read `problem.md`. It explains the real problem, target application, baseline goal, and constraints that should shape candidate selection. Then read `architecture.md` for the full system contract if the next move is not obvious.
 
-- `evaluator.py`
-- `dataset_loader.py`
-- `metrics.py`
-- `scoring.py`
+## Objective
+
+Maximize `primary_score` from the fixed evaluator.
+
+Lower-level metrics matter only insofar as they improve robust performance and do not violate guardrails. The default primary score is validation accuracy unless `scoring_config.yaml` selects a different frozen scorer.
+
+## First Pass
+
+Start every session by building a current map:
+
+1. Read `problem.md`.
+2. Run `autoresearch index --status active`.
+3. Inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
+4. Open the most relevant recent run README, `metrics.json`, `run.log`, and plots.
+5. Decide whether to continue the current branch, walk back up the run tree, or start a new branch.
+
+Do not start by editing code. Let the run history and evaluator output tell you where the signal is.
+
+## Editable Files
+
+You may edit:
+
+- `runs/<branch>/<NNN_name>/candidate.py`
+- run README findings and front matter
+- `ideas.md`
+- `results.tsv` by appending rows only
+
+You may not edit:
+
+- `src/autoresearch/evaluator.py`
+- `src/autoresearch/dataset_loader.py`
+- `src/autoresearch/scoring.py`
 - `scoring_config.yaml`
 - `data/`
-- `scripts/compare_results.py`
+- existing rows in `results.tsv`
 
-If schema validation fails, fix candidate output shape and rerun the same experiment. Do not score schema failures as rejected experiments.
+If the evaluator, scoring config, or dataset construction appears wrong, write the specific issue in `evaluator_issues.md` or stop with a `data_blockage` / `data_analysis_issue`. Do not patch the frozen layer from inside an experiment.
+
+## Required Loop
+
+Repeat this loop until blocked or plateaued:
+
+1. Choose one candidate idea from `ideas.md`, the latest run findings, or an obvious next ablation.
+2. Choose the correct run branch folder.
+3. Create a new branch folder only for structural architecture changes.
+4. For a completely different idea, step back up the tree and choose another branch or create a new root branch under `runs/`.
+5. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>`.
+6. Edit only the marked `predict(row)` function in the generated `candidate.py`, unless the experiment explicitly requires a broader candidate-local change.
+7. Run `scripts/verify.sh runs/<branch>/<NNN_name>`.
+8. Read `metrics.json`, `run.log`, generated plots, and the run README.
+9. Append one row to `results.tsv`.
+10. Update run README front matter and findings with the status and what was learned.
+11. Update `ideas.md` with the high-level result and next branch to try.
+12. Continue to the next experiment.
+
+Do not stop after one experiment if the harness is still producing useful signal.
+
+## Run Tree Discipline
+
+`runs/` is a folder and file based experiment tree.
+
+Each run directory should include:
+
+- `candidate.py`
+- `config.json`
+- `metrics.json`
+- `run.log`
+- `README.md`
+- `plots/` with generated score, loss, or diagnostic graphs when meaningful
+
+The folder above the numbered runs is the experiment type or idea branch. Multiple experiments in the same branch should be numerically versioned and should tune comparable hyperparameters or local implementation choices.
+
+Create a new branch folder when the model architecture or experiment family changes materially, such as a new feature family, new model class, additional attention head, or a materially different training strategy. Do not create a new branch for schema-compatible output formatting fixes or small candidate-local postprocessing.
+
+## Candidate Discipline
+
+Prefer the simplest plausible improvement.
+
+Search order:
+
+1. classical heuristic
+2. feature-conditioned heuristic
+3. hyperparameter sweep
+4. linear model
+5. tree-based model
+6. small neural net
+7. sequence model
+8. transformer-style model
+
+Do not introduce a transformer unless simpler models have plateaued and the result can satisfy runtime and deployment constraints.
+
+The creative surface is the candidate. The harness, schema, scorer, metadata, and directory shape are created deterministically.
+
+## Schema And Scoring
+
+Every candidate output must validate against the frozen prediction schema before scoring happens.
+
+If the evaluator returns `schema_validation_failed`, do not mark it as a scored rejection. Treat it as candidate feedback, fix the output shape in the same numbered experiment, and rerun until it validates or the issue is clearly blocked.
+
+The evaluator should check row count, row IDs, uniqueness, split membership, missing rows, extra rows, duplicates, and schema shape. Invalid records may be dropped only within the configured tolerance. If failures exceed tolerance, scoring is skipped.
+
+Schema and scorer changes roll forward. Do not keep a growing pile of old schema files in the repo. When schema or scoring changes, increment the version, rerun experiments under the new contract, and do not compare old scores against new scores unless rerun.
+
+## Data And Holdout Rules
+
+Optimize against train and validation. Do not inspect holdout rows, holdout labels, holdout label distributions, or holdout-derived artifacts.
+
+If you see holdout leakage in `data/README.md`, `manifest.json`, logs, plots, or metrics, stop and report a data blockage. The data must be pruned or regenerated before the loop continues.
+
+`stress.jsonl` is for adversarial, rare, corrupted, shifted, or boundary-condition rows. Use stress results as a guardrail and diagnostic signal, not as the everyday optimization target.
+
+Training is allowed only through the evaluator-provided `fit(train_rows)` hook. Validation, holdout, and stress rows must arrive label-stripped through `predict(row)`.
+
+## Acceptance Policy
+
+A candidate is accepted only if:
+
+- validation `primary_score` improves
+- no hard guardrails fail
+- diagnostic metrics are not suspicious
+- implementation remains simple enough to reason about
+
+A candidate is promoted to best only if:
+
+- validation improves
+- stress does not degrade materially
+- holdout passes when scheduled
+
+Reject any candidate that:
+
+- exploits evaluator weakness
+- increases hidden risk
+- adds large complexity for tiny gain
+- creates runtime, memory, or dependency problems
+- requires data unavailable in production
+- depends on future information, labels, holdout leakage, or evaluator-only artifacts
+
+## Status Model
+
+Use these statuses consistently in run README front matter and logs:
+
+- `running`
+- `schema_failed`
+- `failed`
+- `rejected`
+- `accepted`
+- `promoted`
+- `archived`
+- `stale_due_to_rescore`
+
+Use `archived` for branches kept for history but no longer active. Use `stale_due_to_rescore` when a scorer, schema, or dataset version changed and old metrics are no longer comparable.
+
+## Results Ledger
+
+`results.tsv` is append-only. If a row is wrong, append a superseding correction row using `correction_of` or `supersedes_run_id`. Never rewrite old rows.
+
+Append rows with this shape:
+
+```tsv
+timestamp commit branch idea_id status primary_score validation_accuracy holdout_score runtime_seconds memory_mb scorer_id schema_version dataset_version correction_of supersedes_run_id notes
+```
+
+Schema failures are logged but are not scored experiments.
+
+## Plateau Behavior
+
+Do not keep hill-climbing inside a dead branch indefinitely.
+
+Useful plateau signals:
+
+- loss curve plateau
+- no accepted improvement after repeated valid runs
+- multiple epochs or parameter sweeps do not move the metric
+- noisy convergence with no stable improvement
+- validation gains disappear on stress or scheduled holdout checks
+- complexity rises faster than score
+
+When a branch plateaus, summarize the evidence in the branch README, mark the branch `archived` if appropriate, and walk back up the run tree to a different branch or root-level idea.
+
+## Blocking
+
+You may only stop if blocked.
+
+Stop and report instead of retrying blindly when you hit:
+
+- frozen evaluator drift
+- data leakage
+- malformed or missing split data
+- repeated evaluator/runtime failures
+- dependency unavailable in the project environment
+- schema or scorer mismatch that cannot be fixed in candidate output
+- not enough signal and no useful next branch is available
+
+Use this format:
+
+```text
+BLOCKED: <reason>
+NEEDED: <specific human action>
+```
+
+Otherwise continue looping.

@@ -8,10 +8,6 @@ from pathlib import Path
 from .paths import find_repo_root
 
 DEFAULT_FROZEN_PATHS = [
-    "evaluator.py",
-    "dataset_loader.py",
-    "metrics.py",
-    "scoring.py",
     "scoring_config.yaml",
     "data/manifest.json",
     "src/autoresearch/evaluator.py",

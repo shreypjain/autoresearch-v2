@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -76,7 +77,7 @@ def new_experiment(
     root: bool = typer.Option(False, "--root"),
 ) -> None:
     """Create a numbered experiment inside the current runs/<branch> directory."""
-    command = ["scripts/new-experiment"]
+    command = [sys.executable, "-m", "autoresearch.new_experiment"]
     if short_name:
         command.append(short_name)
     if idea_id:

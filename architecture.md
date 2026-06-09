@@ -78,8 +78,8 @@ Inspired by `karpathy/autoresearch`, but shaped for a frozen evaluator and a fil
 ```text
 skills/autoresearch = skill breakdown for how to run autoresearch
 problem.md          = guided problem scope, goal, application, and baseline target
-strategy.py         = editable candidate surface
-evaluator.py        = frozen evaluation harness
+runs/*/*/candidate.py = editable candidate surface generated per experiment
+src/autoresearch/  = CLI, onboarding, evaluator, data loading, and scoring harness
 data/               = frozen train / validation / holdout jsonl datasets
 results.tsv         = experiment ledger
 ideas.md            = running idea log, branch notes, and high-level results
@@ -113,15 +113,14 @@ agentic-experiments/
     autoresearch/
       SKILL.md                  # how the agent runs the loop
 
-  strategy.py                   # editable candidate surface
-  features.py                   # optionally editable
-  models.py                     # optionally editable
-  config.py                     # editable only if allowed
-
-  evaluator.py                  # frozen to agent – marked in the skill
-  dataset_loader.py             # frozen to agent – marked in the skill
-  metrics.py                    # frozen to agent – marked in the skill
-  scoring.py                    # frozen to agent – marked in the skill
+  src/
+    autoresearch/
+      cli.py                    # installed `autoresearch` command
+      onboarding.py             # guided setup flow
+      evaluator.py              # frozen to agent - marked in the skill
+      dataset_loader.py         # frozen to agent - marked in the skill
+      scoring.py                # frozen to agent - marked in the skill
+      new_experiment.py         # installed `new-experiment` command
   scoring_config.yaml           # frozen selected scorer and prediction schema
 
   results.tsv                   # append-only experiment ledger
@@ -329,10 +328,10 @@ Project setup should copy `.env.example` to `.env` immediately, leaving placehol
 The agent has strict scope on what it can modify:
 
 ```text
-strategy.py
-features.py
-models.py
-config.py, if explicitly allowed
+runs/<branch>/<NNN_name>/candidate.py
+generated run README front matter and findings
+results.tsv by appending rows only
+ideas.md
 ```
 
 ### Frozen / not editable by the agent
@@ -340,13 +339,11 @@ config.py, if explicitly allowed
 The agent may not modify:
 
 ```text
-evaluator.py
-dataset_loader.py
-metrics.py
-scoring.py
+src/autoresearch/evaluator.py
+src/autoresearch/dataset_loader.py
+src/autoresearch/scoring.py
 scoring_config.yaml
 data/
-scripts/compare_results.py
 ```
 
 If the agent believes the evaluator is wrong, it should write a note in `evaluator_issues.md`, not edit the evaluator. The agent may read evaluator errors and consistency-check output, but it should not create ad hoc files to work around data or evaluator problems. If the blocker is a data issue, holdout leak, malformed split, or evaluator inconsistency, stop the loop and report a `data_blockage` or `data_analysis_issue` with the specific evidence needed for a human to decide whether the frozen layer should change.
@@ -357,7 +354,7 @@ Policy alone is not enough; a single bad agent turn can silently edit the evalua
 
 ```text
 freeze manifest    = frozen.lock file at repo root listing each frozen path and its sha256
-verify-freeze      = scripts/verify_freeze.py recomputes hashes and fails on any drift
+verify-freeze      = python -m autoresearch.verify_freeze recomputes hashes and fails on any drift
 pre-run gate       = verify.sh runs verify-freeze before every evaluation; a dirty frozen
                      layer is a hard failure (status: frozen_layer_modified), not a warning
 git enforcement    = pre-commit hook rejects commits touching frozen paths unless
@@ -664,12 +661,12 @@ status
 Add a walk / traversal command or function in the shell files and scripts:
 
 ```bash
-python scripts/readme_index.py --root . --format table
-python scripts/readme_index.py --root . --kind experiment_branch --status active
-python scripts/readme_index.py --root . --format json > runs/readme_index.json
+autoresearch index
+autoresearch index --kind experiment_branch --status active
+python -m autoresearch.readme_index --root . --format json > runs/readme_index.json
 ```
 
-`scripts/readme_index.py` should:
+The README index command should:
 
 ```text
 walk the repo for README.md files
@@ -683,7 +680,7 @@ sort by kind, status, best_score, and updated timestamp when available
 This gives the agent a cheap first pass to get up to speed when invoking a new session:
 
 ```text
-1. Run `python scripts/readme_index.py --root . --status active`.
+1. Run `autoresearch index --status active`.
 2. Find active branches with no recent accepted run.
 3. Find failed branches with useful next ideas.
 4. Pick the next branch before opening larger logs or plots.
@@ -695,7 +692,7 @@ This gives the agent a cheap first pass to get up to speed when invoking a new s
 
 The evaluation harness should be able to provide a single primary score plus a set of diagnostic metrics.
 
-`evaluator.py` should be structured enough that the frozen boundary is obvious:
+`src/autoresearch/evaluator.py` should be structured enough that the frozen boundary is obvious:
 
 ```text
 load_manifest()
@@ -821,7 +818,7 @@ If a candidate emits the wrong shape, the evaluator should fail before scoring a
 }
 ```
 
-This is not a harness failure. It is candidate feedback. The coding agent should read the validation error, fix `strategy.py` / model output formatting, and rerun the same experiment.
+This is not a harness failure. It is candidate feedback. The coding agent should read the validation error, fix the generated `candidate.py` output formatting, and rerun the same experiment.
 
 ### Primary score
 
@@ -1275,7 +1272,7 @@ RUN_DIR="${1:?usage: scripts/verify.sh <run-dir>}"
 CANDIDATE="${RUN_DIR}/candidate.py"
 
 test -f "$CANDIDATE"
-python evaluator.py \
+python -m autoresearch.evaluator \
   --candidate "$CANDIDATE" \
   --data-manifest data/manifest.json \
   --splits train,validation \
@@ -1301,7 +1298,7 @@ set -euo pipefail
 
 while true; do
   codex exec \
-    "Read problem.md and skills/autoresearch/SKILL.md, run scripts/readme_index.py, inspect ideas.md, results.tsv, and the current runs tree. Create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then run scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
+    "Read problem.md, architecture.md, and skills/autoresearch/SKILL.md. Run autoresearch index, inspect ideas.md, results.tsv, and the current runs tree. Create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
     2>&1 | tee -a runs/agent.log
 
   sleep 1
@@ -1320,7 +1317,7 @@ SESSION_ID="${1:?usage: agent_loop.sh <session_id>}"
 
 while true; do
   codex exec resume "$SESSION_ID" \
-    "Continue from the last state. Read problem.md, run scripts/readme_index.py, then create the next experiment by cd'ing into the chosen runs/<branch> directory and running new-experiment. Use scripts/verify.sh. If an experiment completed, inspect results, plots, README findings, and metrics; log it, accept/reject it, and start the next one." \
+    "Continue from the last state. Read problem.md, run autoresearch index, then create the next experiment by cd'ing into the chosen runs/<branch> directory and running new-experiment. Use scripts/verify.sh. If an experiment completed, inspect results, plots, README findings, and metrics; log it, accept/reject it, and start the next one." \
     2>&1 | tee -a runs/agent.log
 
   sleep 1
@@ -1434,27 +1431,25 @@ Lower-level metrics matter only insofar as they improve robust performance and d
 
 You may edit:
 
-- `strategy.py`
-- `features.py`
-- `models.py`
-- `config.py`
+- `runs/<branch>/<NNN_name>/candidate.py`
+- run README findings and front matter
+- `ideas.md`
+- `results.tsv` by appending rows only
 
 You may not edit:
 
-- `evaluator.py`
-- `dataset_loader.py`
-- `metrics.py`
-- `scoring.py`
+- `src/autoresearch/evaluator.py`
+- `src/autoresearch/dataset_loader.py`
+- `src/autoresearch/scoring.py`
 - `scoring_config.yaml`
 - `data/`
-- `scripts/compare_results.py`
 - existing rows in `results.tsv`
 
 ## Required loop
 
 Repeat forever:
 
-1. Read `problem.md`, run `python scripts/readme_index.py --root . --status active`, then inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
+1. Read `problem.md`, run `autoresearch index --status active`, then inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
 2. Choose one candidate idea.
 3. Choose the correct run branch folder, or create a new one if this is a structural change.
 4. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>` to create the next numbered run directory in that branch.
@@ -1605,7 +1600,7 @@ Build the smallest thing that lets an agent run 25 experiments safely.
 
 ```text
 fixed evaluator
-single strategy.py
+single generated candidate.py per run
 single agent loop
 results.tsv
 accept/reject by validation score

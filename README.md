@@ -7,84 +7,66 @@ current_best: runs/baseline_classifier/001_baseline
 
 # Autoresearch V2
 
-Autoresearch V2 is a forkable experiment harness for agent-driven ML iteration. The harness owns data loading, schema validation, scoring, and result logging. The agent proposes candidates and edits only the generated `predict(row)` function.
+Fork this repo, add your data, and let an agent run schema-checked ML experiments.
 
-## Quickstart
+The harness owns data loading, validation, scoring, and run logging. The agent edits generated candidates and the evaluator decides what worked.
+
+## Start
 
 ```bash
 git clone <your-fork-url>
 cd autoresearch-v2
 make start
+make onboard
+make loop
+```
+
+That is the intended path:
+
+1. `make start` installs the local CLI and verifies the starter baseline.
+2. `make onboard` asks for your API key, problem scope, and data mapping.
+3. `make loop` starts the recursive Codex experiment loop.
+
+If your data is not ready, leave the onboarding data prompt blank. Later you can rerun onboarding, import a CSV/JSON/JSONL file, or give the coding agent one representative source file and ask it to migrate it into `data/*.jsonl`.
+
+## Useful Commands
+
+```bash
+make start      # install and verify the starter project
+make onboard    # guided setup
+make loop       # recursive agent loop
+make test       # smoke-test the harness
+make verify RUN=runs/baseline_classifier/001_baseline
+```
+
+Activate the environment when you want direct CLI access:
+
+```bash
 source .venv/bin/activate
-autoresearch onboard
+autoresearch --help
 ```
 
-`make start` creates a virtual environment, installs the package, copies `.env.example` to `.env`, writes demo data if needed, creates the initial experiment, verifies it, and writes `frozen.lock`.
+## Files That Matter
 
-`autoresearch onboard` opens a guided setup flow for API-key entry, problem scope, data import, id/input/label column selection, train/validation/holdout split fractions, and baseline verification.
+- `problem.md`: human problem scope. Create it once during onboarding.
+- `data/`: train, validation, holdout, stress, and manifest files.
+- `scoring_config.yaml`: schema and scorer contract.
+- `runs/`: experiment tree and artifacts.
+- `results.tsv`: append-only experiment ledger.
+- `architecture.md`: deeper rules for agents and maintainers.
 
-If your data is not ready yet, leave the data-file prompt blank. Onboarding will keep going. Later, either rerun onboarding with a CSV/JSON/JSONL file, run `autoresearch data import`, or give the coding agent one representative source file and ask it to migrate that source into `data/*.jsonl`.
+## Default Data Shape
 
-After that:
-
-```bash
-# Replace data/*.jsonl with your data, then validate/index the project.
-make clean-data
-make index
-
-# Create a new experiment from inside a branch.
-cd runs/baseline_classifier
-new-experiment threshold_tuning --idea-id IDEA-001
-cd ../..
-make verify RUN=runs/baseline_classifier/002_threshold_tuning
-```
-
-If you do not want to activate the venv, use the repo script directly from a branch:
-
-```bash
-../../scripts/new-experiment threshold_tuning --idea-id IDEA-001
-```
-
-For neural-network experiments, install the optional deep-learning extra after setup:
-
-```bash
-.venv/bin/pip install -e '.[deep]'
-```
-
-## CLI
-
-```bash
-autoresearch onboard
-autoresearch tui
-autoresearch index
-autoresearch data validate
-autoresearch data import ./data.csv --id-field id --label-field label --input-fields text
-autoresearch verify runs/baseline_classifier/001_baseline
-autoresearch loop
-```
-
-## Data Contract
-
-The default task is classification. Each row should be JSONL with:
+Rows default to:
 
 ```json
 {"id": "row-1", "text": "example input", "label": "accept"}
 ```
 
-The candidate receives label-stripped rows and must return:
+Predictions default to:
 
 ```json
 {"id": "row-1", "predicted_label": "accept", "confidence": 0.5}
 ```
 
-Edit `scoring_config.yaml` and rerun experiments when you need a different schema or scorer.
-
-## Agent Loop
-
-Once your data and `problem.md` are set, start the loop:
-
-```bash
-make loop
-```
-
-The loop expects `codex` on PATH. It repeatedly reads `problem.md`, indexes run metadata, creates the next experiment with `new-experiment`, and verifies it through `scripts/verify.sh`.
+Change `scoring_config.yaml` when your task needs a different schema or scorer.

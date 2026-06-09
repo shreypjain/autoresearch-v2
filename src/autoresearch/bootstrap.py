@@ -40,10 +40,8 @@ def main() -> int:
     (root / "runs/baseline_classifier/001_baseline/plots").mkdir(parents=True, exist_ok=True)
     _run(root, [sys.executable, "-m", "autoresearch.verify_freeze", "--write"])
     _run(root, ["scripts/verify.sh", "runs/baseline_classifier/001_baseline"])
-    print("\nReady. Replace data/*.jsonl with your data, then run:")
-    print("  source .venv/bin/activate")
-    print("  make clean-data")
-    print("  make index")
+    print("\nReady. Next run:")
+    print("  make onboard")
     print("  make loop")
     return 0
 

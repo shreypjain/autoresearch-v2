@@ -29,12 +29,6 @@ deep = [
 
 [project.scripts]
 autoresearch = "autoresearch.cli:app"
-autoresearch-bootstrap = "autoresearch.bootstrap:main"
-autoresearch-evaluate = "autoresearch.evaluator:main"
-autoresearch-index = "autoresearch.readme_index:main"
-autoresearch-new-experiment = "autoresearch.new_experiment:main"
-autoresearch-prepare-data = "autoresearch.prepare_data:main"
-autoresearch-verify-freeze = "autoresearch.verify_freeze:main"
 new-experiment = "autoresearch.new_experiment:main"
 
 [tool.setuptools.packages.find]
