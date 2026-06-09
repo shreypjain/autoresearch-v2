@@ -52,7 +52,7 @@ source .venv/bin/activate
 | `autoresearch loop` | Run the recursive non-interactive loop. |
 | `autoresearch monitor` | See the active session, best score, unfinished runs, and summary stats. |
 | `autoresearch monitor --watch` | Keep the monitor open. |
-| `autoresearch nudge "message"` | Add a human instruction for the next loop turn or restarted UI session. |
+| `autoresearch nudge "message"` | Queue a human instruction for the tracked Codex session. |
 | `autoresearch index` | Traverse run README metadata. |
 | `autoresearch verify <run_dir>` | Run the evaluator for one candidate. |
 | `autoresearch data validate` | Validate data files against the configured contract. |
@@ -67,9 +67,12 @@ Use `nudge` when the running direction is wrong:
 autoresearch nudge "Stop adding validation-selected clauses; start a train-fitted model branch or run stress/holdout before trusting this candidate."
 autoresearch nudge --file note.md
 autoresearch nudge --clear "Replace the old steering with this instruction."
+autoresearch nudge --send-now "Read the inbox and move to confidence-word model training."
 ```
 
-Nudges are written to `runs/agent/inbox.md`. The next non-interactive loop turn reads them automatically. If a classic Codex UI session is already open, restart or resume it so the prompt includes the new inbox content.
+Nudges are written to `runs/agent/inbox.md` and `runs/agent/nudges.jsonl`. The CLI records the latest Codex session id for this repo from Codex's local session metadata, so `autoresearch monitor` can show the exact session and resume command.
+
+Use `--send-now` when you want to immediately send the nudge through `codex exec resume <session_id>` instead of only queueing it for the next loop turn.
 
 For session recovery:
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from .codex_sessions import sync_latest_session
 from .onboarding import run_onboarding
 from .paths import find_repo_root
 from .prepare_data import validate_data, write_demo
@@ -23,6 +25,25 @@ console = Console()
 
 def _run(command: list[str]) -> None:
     subprocess.run(command, cwd=find_repo_root(), check=True)
+
+
+def _latest_nudge(inbox: Path) -> str:
+    if not inbox.exists():
+        return ""
+    current: list[str] = []
+    latest: list[str] = []
+    for line in inbox.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            if current:
+                latest = current
+            current = []
+            continue
+        if line.startswith("session_id:"):
+            continue
+        current.append(line)
+    if current:
+        latest = current
+    return "\n".join(latest).strip()
 
 
 @app.command()
@@ -55,11 +76,15 @@ def nudge(
     message: Optional[str] = typer.Argument(None, help="Instruction to append for the next agent loop turn."),
     file: Optional[Path] = typer.Option(None, "--file", "-f", exists=True, help="Read the instruction from a file."),
     clear: bool = typer.Option(False, "--clear", help="Clear pending nudges before writing the new one."),
+    send_now: bool = typer.Option(False, "--send-now", help="Send the nudge through codex exec resume immediately."),
 ) -> None:
     """Append a human instruction for future loop iterations to read."""
     root = find_repo_root()
     inbox = root / "runs/agent/inbox.md"
+    queue = root / "runs/agent/nudges.jsonl"
     inbox.parent.mkdir(parents=True, exist_ok=True)
+    state = sync_latest_session(root)
+    session_id = str(state.get("session_id") or "")
     if clear:
         inbox.write_text("", encoding="utf-8")
     chunks: list[str] = []
@@ -68,17 +93,54 @@ def nudge(
     if message:
         chunks.append(message.strip())
     if not chunks:
-        console.print(f"[bold]{inbox.relative_to(root)}[/bold]")
-        if inbox.exists() and inbox.read_text(encoding="utf-8").strip():
-            console.print(inbox.read_text(encoding="utf-8"))
+        if send_now:
+            latest = _latest_nudge(inbox)
+            if not latest:
+                console.print("[yellow]No pending nudge to send.[/yellow]")
+                raise typer.Exit(2)
+            chunks.append(latest)
         else:
-            console.print("[dim]No pending nudges.[/dim]")
-        return
+            console.print(f"[bold]{inbox.relative_to(root)}[/bold]")
+            if inbox.exists() and inbox.read_text(encoding="utf-8").strip():
+                console.print(inbox.read_text(encoding="utf-8"))
+            else:
+                console.print("[dim]No pending nudges.[/dim]")
+            return
+    append_to_inbox = bool(file or message)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     entry = "\n\n".join(chunk for chunk in chunks if chunk)
-    with inbox.open("a", encoding="utf-8") as handle:
-        handle.write(f"\n\n## {timestamp}\n\n{entry}\n")
-    console.print(f"[green]Wrote nudge to {inbox.relative_to(root)}[/green]")
+    if append_to_inbox:
+        with inbox.open("a", encoding="utf-8") as handle:
+            session_line = f"\n\nsession_id: {session_id}" if session_id else ""
+            handle.write(f"\n\n## {timestamp}{session_line}\n\n{entry}\n")
+    with queue.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "timestamp": timestamp,
+                    "session_id": session_id,
+                    "message": entry,
+                    "sent_now": send_now,
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+    if append_to_inbox:
+        console.print(f"[green]Wrote nudge to {inbox.relative_to(root)}[/green]")
+    else:
+        console.print(f"[green]Sending latest nudge from {inbox.relative_to(root)}[/green]")
+    if session_id:
+        console.print(f"[green]Queued for Codex session {session_id}[/green]")
+    else:
+        console.print("[yellow]No Codex session id found for this repo yet.[/yellow]")
+    if send_now:
+        if not session_id:
+            raise typer.Exit(2)
+        prompt = f"Human nudge from autoresearch:\n\n{entry}\n\nRead runs/agent/inbox.md, then continue the current autoresearch loop."
+        _run(["codex", "exec", "resume", session_id, prompt])
+        console.print("[green]Sent through background codex exec resume.[/green]")
+        console.print("[dim]An already-open Codex TUI pane may not repaint; use autoresearch monitor to confirm delivery.[/dim]")
 
 
 @app.command()
