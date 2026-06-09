@@ -119,6 +119,28 @@ The folder above the numbered runs is the experiment type or idea branch. Multip
 
 Create a new branch folder when the model architecture or experiment family changes materially, such as a new feature family, new model class, additional attention head, or a materially different training strategy. Do not create a new branch for schema-compatible output formatting fixes or small candidate-local postprocessing.
 
+## Run README Discipline
+
+Every run README must be specific enough that a future session can understand the experiment without reopening the entire transcript.
+
+Before verification, fill in:
+
+- the hypothesis being tested
+- candidate family, such as heuristic, train-fitted model, ranker, neural net, or calibration layer
+- what `fit(train_rows)` learns, or explicitly state that no training happens
+- what `predict(row)` depends on
+- the primary comparison and promotion/rejection bar
+- known leakage and overfit risks
+
+After verification, fill in:
+
+- train score, validation score, baseline/current-best comparison, runtime, and schema issues
+- whether the result came from broad train-learned signal or narrow validation-exposed rules
+- why the result should generalize, or why it is suspicious
+- exact next action: continue, reject, archive, stress/holdout/resplit, or start a broader train-fitted branch
+
+Avoid vague summaries like "improved validation" or "generated experiment." The README is the memory layer for the next agent.
+
 ## Candidate Discipline
 
 Prefer the simplest plausible improvement.
@@ -137,6 +159,29 @@ Search order:
 Do not introduce a transformer unless simpler models have plateaued and the result can satisfy runtime and deployment constraints.
 
 The creative surface is the candidate. The harness, schema, scorer, metadata, and directory shape are created deterministically.
+
+## Model Training Escalation
+
+Rule-based baselines are useful at the beginning, but do not keep adding hand-written validation-selected clauses after the first few probes.
+
+If the loop has already tried several heuristic or rule branches and the best ideas are becoming narrow exceptions, start a train-fitted model branch. Use `fit(train_rows)` to learn from train labels only. Validation is for scoring and acceptance, not for selecting subject names, model names, thresholds, or per-segment exceptions.
+
+Acceptable next model branches include:
+
+- answer-level logistic regression or linear model using train-only features
+- tree-based model over structured response, vote, confidence, model-name, and subject features
+- train-only cross-validated ranker that scores each candidate answer and chooses the best
+- calibration/backoff model that learns when to trust mode, a model answer, or an aggregate response feature
+- small neural net only after classical train-fitted models plateau
+
+For answer-selection tasks, prefer a train-fitted answer/ranker formulation:
+
+1. In `fit(train_rows)`, build training examples for each row/answer choice from train labels only.
+2. Learn parameters, thresholds, or model weights using train rows or a train-internal split.
+3. In `predict(row)`, score candidate answers without seeing labels.
+4. Report train and validation performance separately.
+
+Do not repeatedly inspect validation outcomes and add clauses like "if subject is X and model is Y." That is validation hillclimbing. Once that pattern appears, stop and either run stress/holdout/resplit or move to a broader train-fitted model.
 
 ## Schema And Scoring
 
@@ -236,7 +281,7 @@ Example pattern:
 - the candidate adds clauses like Genetics/Molecular Biology with model 2, Organic Chemistry with model 3, and Chemistry (general) with model 4
 - train accuracy remains below the mode baseline while validation keeps improving
 
-That pattern may be a real dataset insight, but it is also a classic validation-hillclimbing risk. Stop adding more subject/model clauses. Summarize the risk, run stress/holdout or a different split if allowed, or archive the branch and move to a broader idea.
+That pattern may be a real dataset insight, but it is also a classic validation-hillclimbing risk. Stop adding more subject/model clauses. Summarize the risk, run stress/holdout or a different split if allowed, or archive the branch and move to a broader train-fitted model idea.
 
 ## Blocking
 

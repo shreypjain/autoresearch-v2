@@ -6,13 +6,15 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 AGENT_DIR="${ROOT_DIR}/runs/agent"
 MODE="${1:-exec}"
 RUN_FOREVER=1
+export PYTHONPATH="${ROOT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+export PATH="${ROOT_DIR}:${ROOT_DIR}/.venv/bin:${PATH}"
 
 if ! command -v codex >/dev/null 2>&1; then
   echo "codex CLI is not installed or not on PATH" >&2
   exit 127
 fi
 
-PROMPT="Read problem.md, architecture.md, skills/autoresearch/SKILL.md, and runs/agent/inbox.md if it exists. Treat inbox.md as the latest human steering. First do an interrupt/recovery scan: run autoresearch index, inspect results.tsv, ideas.md, best/README.md, and the current runs tree; find runs that were created but not verified, verified but not logged, or logged but not summarized. Continue the most recent useful unfinished run before creating anything new. If no unfinished run exists, create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not use scripts/new-experiment. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it."
+PROMPT="Read problem.md, architecture.md, skills/autoresearch/SKILL.md, and runs/agent/inbox.md if it exists. Treat inbox.md as the latest human steering. First do an interrupt/recovery scan: run autoresearch index, inspect results.tsv, ideas.md, best/README.md, and the current runs tree; find runs that were created but not verified, verified but not logged, or logged but not summarized. Continue the most recent useful unfinished run before creating anything new. If recent wins come from narrow validation-selected clauses, stop adding clauses and start a broader train-fitted model branch or run stress/holdout/resplit. If no unfinished run exists, create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not use scripts/new-experiment. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it."
 
 usage() {
   cat <<'EOF'
