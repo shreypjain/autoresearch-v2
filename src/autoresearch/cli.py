@@ -39,6 +39,17 @@ def tui() -> None:
 
 
 @app.command()
+def monitor(
+    watch: bool = typer.Option(False, "--watch", "-w", help="Refresh the monitor until interrupted."),
+    interval: float = typer.Option(5.0, "--interval", help="Refresh interval in seconds for --watch."),
+) -> None:
+    """Show the active agent, unfinished runs, best scores, and interesting stats."""
+    from .monitor import render_monitor
+
+    render_monitor(watch=watch, interval=interval)
+
+
+@app.command()
 def index(
     kind: Optional[str] = typer.Option(None, help="Filter by front matter kind."),
     status: Optional[str] = typer.Option(None, help="Filter by front matter status."),

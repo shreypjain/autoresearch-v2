@@ -1,4 +1,4 @@
-.PHONY: bootstrap start setup onboard tui demo-data clean-data index new-experiment verify freeze verify-freeze loop loop-once loop-ui resume test
+.PHONY: bootstrap start setup onboard tui monitor monitor-watch demo-data clean-data index new-experiment verify freeze verify-freeze loop loop-once loop-ui resume test
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -18,6 +18,12 @@ onboard: setup
 
 tui: setup
 	$(PY) -m autoresearch.cli tui
+
+monitor: setup
+	$(PY) -m autoresearch.cli monitor
+
+monitor-watch: setup
+	$(PY) -m autoresearch.cli monitor --watch
 
 setup:
 	$(PYTHON) -m venv $(VENV)

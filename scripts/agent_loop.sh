@@ -65,6 +65,40 @@ output_path.write_text((unique[-1] if unique else "") + "\n", encoding="utf-8")
 PY
 }
 
+write_agent_state() {
+  local status="$1"
+  AGENT_STATE_PATH="${AGENT_DIR}/current.json" \
+  AGENT_STARTED_AT="${STARTED_AT:-}" \
+  AGENT_STATUS="${status}" \
+  AGENT_SESSION_ID="${SESSION_ID:-}" \
+  AGENT_RUN_DIR="${RUN_DIR#${ROOT_DIR}/}" \
+  AGENT_JSON_LOG="${JSON_LOG#${ROOT_DIR}/}" \
+  AGENT_LAST_MESSAGE="${LAST_MESSAGE#${ROOT_DIR}/}" \
+  AGENT_STDERR_LOG="${STDERR_LOG#${ROOT_DIR}/}" \
+  AGENT_PROMPT="${PROMPT}" \
+  python3 - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+state = {
+    "started_at": os.environ.get("AGENT_STARTED_AT", ""),
+    "status": os.environ.get("AGENT_STATUS", ""),
+    "session_id": os.environ.get("AGENT_SESSION_ID", ""),
+    "run_dir": os.environ.get("AGENT_RUN_DIR", ""),
+    "json_log": os.environ.get("AGENT_JSON_LOG", ""),
+    "last_message": os.environ.get("AGENT_LAST_MESSAGE", ""),
+    "stderr_log": os.environ.get("AGENT_STDERR_LOG", ""),
+    "prompt": os.environ.get("AGENT_PROMPT", ""),
+}
+path = Path(os.environ["AGENT_STATE_PATH"])
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
 if [[ "${MODE}" == "--help" || "${MODE}" == "-h" ]]; then
   usage
   exit 0
@@ -106,7 +140,9 @@ while true; do
   LAST_MESSAGE="${RUN_DIR}/last_message.md"
   STDERR_LOG="${RUN_DIR}/stderr.log"
   SESSION_FILE="${RUN_DIR}/session_id.txt"
+  SESSION_ID=""
   mkdir -p "${RUN_DIR}"
+  write_agent_state "running"
 
   echo "codex exec started_at=${STARTED_AT}"
   echo "  events: ${JSON_LOG#${ROOT_DIR}/}"
@@ -121,6 +157,11 @@ while true; do
   SESSION_ID="$(tr -d '[:space:]' < "${SESSION_FILE}")"
   if [[ -z "${SESSION_ID}" ]]; then
     SESSION_ID="unknown"
+  fi
+  if [[ "${STATUS}" -eq 0 ]]; then
+    write_agent_state "finished"
+  else
+    write_agent_state "failed:${STATUS}"
   fi
 
   printf "%s\t%s\t%s\t%s\t%s\t%s\n" \

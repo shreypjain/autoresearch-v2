@@ -36,6 +36,8 @@ make start      # install and verify the starter project
 make onboard    # guided setup
 make loop       # recursive agent loop
 make loop-ui    # same prompt in the classic Codex UI
+make monitor    # one-screen summary of the active agent and best runs
+make monitor-watch
 make resume SESSION=<codex-session-id>
 make test       # smoke-test the harness
 make verify RUN=runs/baseline_classifier/001_baseline
@@ -49,6 +51,8 @@ autoresearch --help
 ```
 
 `make loop` writes each Codex exec run under `runs/agent/<timestamp>/` with `events.jsonl`, `last_message.md`, `stderr.log`, and `session_id.txt`. It also appends `runs/agent/index.tsv` so you can resume or inspect previous runs without reading a giant terminal stream.
+
+`make monitor` shows the active session, what it is trying to accomplish, unfinished runs, current best scores, and the most interesting summary stats.
 
 ## Files That Matter
 
