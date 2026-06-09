@@ -178,6 +178,37 @@ agentic-experiments/
 
 ---
 
+## CLI and TUI
+
+The installed package should expose a single `autoresearch` command for humans and agents:
+
+```bash
+autoresearch onboard
+autoresearch tui
+autoresearch index
+autoresearch data validate
+autoresearch data import ./data.csv --id-field id --label-field label --input-fields text
+autoresearch verify runs/baseline_classifier/001_baseline
+autoresearch loop
+```
+
+The onboarding flow should guide:
+
+```text
+API key / .env setup
+problem.md creation
+CSV / JSON / JSONL data import
+id field selection
+input column selection
+label field selection
+train / validation / holdout split fractions
+baseline verification
+```
+
+The TUI should be a dashboard, not the source of truth. It should display project state, README front matter, run statuses, and metrics, while all durable state remains in files.
+
+---
+
 ## Problem Scope Document
 
 Every project should include a guided `problem.md` before agents begin experimenting.

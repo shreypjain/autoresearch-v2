@@ -1,4 +1,4 @@
-.PHONY: bootstrap start setup demo-data clean-data index new-experiment verify freeze verify-freeze loop test
+.PHONY: bootstrap start setup onboard tui demo-data clean-data index new-experiment verify freeze verify-freeze loop test
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -13,6 +13,12 @@ bootstrap:
 
 start: bootstrap
 
+onboard: setup
+	$(PY) -m autoresearch.cli onboard
+
+tui: setup
+	$(PY) -m autoresearch.cli tui
+
 setup:
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
@@ -25,7 +31,7 @@ clean-data:
 	$(PY) -m autoresearch.prepare_data
 
 index:
-	$(PY) -m autoresearch.readme_index --root . --format table
+	$(PY) -m autoresearch.cli index
 
 new-experiment:
 	$(PY) -m autoresearch.new_experiment
@@ -41,7 +47,7 @@ verify-freeze:
 	$(PY) -m autoresearch.verify_freeze
 
 loop:
-	scripts/agent_loop.sh
+	$(PY) -m autoresearch.cli loop
 
 test:
 	$(PY) -m compileall -q .

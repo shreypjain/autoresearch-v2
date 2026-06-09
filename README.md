@@ -16,9 +16,12 @@ git clone <your-fork-url>
 cd autoresearch-v2
 make start
 source .venv/bin/activate
+autoresearch onboard
 ```
 
 `make start` creates a virtual environment, installs the package, copies `.env.example` to `.env`, writes demo data if needed, creates the initial experiment, verifies it, and writes `frozen.lock`.
+
+`autoresearch onboard` opens a guided setup flow for API-key entry, problem scope, data import, id/input/label column selection, train/validation/holdout split fractions, and baseline verification.
 
 After that:
 
@@ -44,6 +47,18 @@ For neural-network experiments, install the optional deep-learning extra after s
 
 ```bash
 .venv/bin/pip install -e '.[deep]'
+```
+
+## CLI
+
+```bash
+autoresearch onboard
+autoresearch tui
+autoresearch index
+autoresearch data validate
+autoresearch data import ./data.csv --id-field id --label-field label --input-fields text
+autoresearch verify runs/baseline_classifier/001_baseline
+autoresearch loop
 ```
 
 ## Data Contract
