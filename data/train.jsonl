@@ -1,0 +1,6 @@
+{"id":"train-001","text":"approve the simple valid request","label":"accept"}
+{"id":"train-002","text":"reject the malformed request","label":"reject"}
+{"id":"train-003","text":"accept a complete and well formed record","label":"accept"}
+{"id":"train-004","text":"reject an incomplete record","label":"reject"}
+{"id":"train-005","text":"approve this clean example","label":"accept"}
+{"id":"train-006","text":"deny this invalid example","label":"reject"}

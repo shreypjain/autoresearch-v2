@@ -1,0 +1,4 @@
+{"id":"validation-001","text":"accept this clean request","label":"accept"}
+{"id":"validation-002","text":"reject this broken request","label":"reject"}
+{"id":"validation-003","text":"approve the complete record","label":"accept"}
+{"id":"validation-004","text":"deny the malformed record","label":"reject"}

@@ -1,0 +1,12 @@
+{
+  "dataset_version": "dataset-v1",
+  "schema_version": 1,
+  "id_field": "id",
+  "label_field": "label",
+  "splits": {
+    "train": "data/train.jsonl",
+    "validation": "data/validation.jsonl",
+    "holdout": "data/holdout.jsonl",
+    "stress": "data/stress.jsonl"
+  }
+}

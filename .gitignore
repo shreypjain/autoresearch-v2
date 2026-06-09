@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+runs/**/run.log
+runs/**/metrics.json
+runs/**/predictions.jsonl
+runs/**/plots/*.png
+runs/readme_index.json

@@ -1,0 +1,2 @@
+{"id":"holdout-001","text":"accept the valid held out request","label":"accept"}
+{"id":"holdout-002","text":"reject the invalid held out request","label":"reject"}

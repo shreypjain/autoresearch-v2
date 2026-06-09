@@ -1,0 +1,3 @@
+{"id":"stress-001","text":"","label":"reject"}
+{"id":"stress-002","text":"ACCEPT accept APPROVE approve valid complete","label":"accept"}
+{"id":"stress-003","text":"reject deny malformed incomplete broken invalid","label":"reject"}

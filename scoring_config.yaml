@@ -1,0 +1,36 @@
+task: classification
+schema_version: 1
+dataset_version: dataset-v1
+scorer_id: accuracy-v1
+primary_scorer: accuracy
+label_field: label
+id_field: id
+allowed_labels:
+  - accept
+  - reject
+fault_tolerance:
+  validation_invalid_row_pct: 5.0
+  holdout_invalid_row_pct: 0.0
+prediction_schema:
+  type: object
+  required:
+    - id
+    - predicted_label
+    - confidence
+  properties:
+    id:
+      type: string
+    predicted_label:
+      type: string
+      enum:
+        - accept
+        - reject
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+  additionalProperties: true
+available_scorers:
+  accuracy:
+    kind: classification_accuracy
+    split: validation

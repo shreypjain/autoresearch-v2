@@ -1,0 +1,11 @@
+{
+  "data/manifest.json": "52b1ee56ec98237eb45c5382a0b310dc5243abf87e79b522ed026fcec4a88276",
+  "dataset_loader.py": "4f29caeff48f9006cb741023b3977f94c90b624d37cf72eb3bed34661cafed66",
+  "evaluator.py": "749001b807eed6c05a1ead7a286d76aab24f180efe471b03f9d9872f2ef5d24f",
+  "metrics.py": "ab774ff694b51e07a836c0e8a28a713174b0d625a7ebeb772ebed4f33d3f7d0b",
+  "scoring.py": "e813828246f90d176299af8aa86d30ded3ccd197f418dbe71d36feec10fba7e8",
+  "scoring_config.yaml": "23c1ba2c9bdd9e65db42f6245b09eac220a5fb5b2321301104f097f9aad9e3ea",
+  "src/autoresearch/dataset_loader.py": "3cac74b7ef28d40d550c1c9e55e83cd6bd85679d222ba6b963f5d70f79865978",
+  "src/autoresearch/evaluator.py": "e2e7ed1a18dd08f8d8f2a20eb5fb61c5a4932acf7eaf39345b008caa481e4cdb",
+  "src/autoresearch/scoring.py": "a078435777cbfb41ee723abaa70e949f1feb1a8b7d78bc1e74e65af2e38aea3c"
+}
