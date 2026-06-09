@@ -105,6 +105,14 @@ if [[ "${MODE}" == "--help" || "${MODE}" == "-h" ]]; then
 fi
 
 if [[ "${MODE}" == "--ui" ]]; then
+  mkdir -p "${AGENT_DIR}"
+  STARTED_AT="$(date -u +%Y%m%dT%H%M%SZ)"
+  RUN_DIR="${AGENT_DIR}/${STARTED_AT}-ui"
+  JSON_LOG=""
+  LAST_MESSAGE=""
+  STDERR_LOG=""
+  SESSION_ID=""
+  write_agent_state "ui_running"
   cd "${ROOT_DIR}"
   echo "Opening Codex UI. Resume later with: codex resume --include-non-interactive --last"
   exec codex --cd "${ROOT_DIR}" --no-alt-screen "${PROMPT}"
@@ -116,6 +124,13 @@ if [[ "${MODE}" == "--resume" ]]; then
     usage >&2
     exit 2
   fi
+  mkdir -p "${AGENT_DIR}"
+  STARTED_AT="$(date -u +%Y%m%dT%H%M%SZ)"
+  RUN_DIR="${AGENT_DIR}/${STARTED_AT}-resume"
+  JSON_LOG=""
+  LAST_MESSAGE=""
+  STDERR_LOG=""
+  write_agent_state "ui_resuming"
   cd "${ROOT_DIR}"
   exec codex resume --include-non-interactive --cd "${ROOT_DIR}" "${SESSION_ID}"
 fi

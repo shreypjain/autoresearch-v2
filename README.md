@@ -9,7 +9,7 @@ current_best: runs/baseline_classifier/001_baseline
 
 Fork this repo, add your data, and let an agent run schema-checked ML experiments.
 
-The harness owns data loading, validation, scoring, and run logging. The agent edits generated candidates and the evaluator decides what worked.
+The harness owns data loading, validation, scoring, and run logging. The agent edits generated candidates. The evaluator decides what worked.
 
 ## Start
 
@@ -17,42 +17,69 @@ The harness owns data loading, validation, scoring, and run logging. The agent e
 git clone <your-fork-url>
 cd autoresearch-v2
 make start
-make onboard
-make loop
-```
-
-That is the intended path:
-
-1. `make start` installs the local CLI and verifies the starter baseline.
-2. `make onboard` asks for your API key, problem scope, and data mapping.
-3. `make loop` starts the recursive Codex experiment loop.
-
-If your data is not ready, leave the onboarding data prompt blank. Later you can rerun onboarding, import a CSV/JSON/JSONL file, or give the coding agent one representative source file and ask it to migrate it into `data/*.jsonl`.
-
-## Useful Commands
-
-```bash
-make start      # install and verify the starter project
-make onboard    # guided setup
-make loop       # recursive agent loop
-make loop-ui    # same prompt in the classic Codex UI
-make monitor    # one-screen summary of the active agent and best runs
-make monitor-watch
-make resume SESSION=<codex-session-id>
-make test       # smoke-test the harness
-make verify RUN=runs/baseline_classifier/001_baseline
-```
-
-Activate the environment when you want direct CLI access:
-
-```bash
 source .venv/bin/activate
-autoresearch --help
+autoresearch onboard
+autoresearch loop --ui
 ```
 
-`make loop` writes each Codex exec run under `runs/agent/<timestamp>/` with `events.jsonl`, `last_message.md`, `stderr.log`, and `session_id.txt`. It also appends `runs/agent/index.tsv` so you can resume or inspect previous runs without reading a giant terminal stream.
+Use the `autoresearch` CLI as the primary interface. `make` is kept as a thin bootstrap/convenience layer for fresh clones.
 
-`make monitor` shows the active session, what it is trying to accomplish, unfinished runs, current best scores, and the most interesting summary stats.
+## CLI
+
+```bash
+autoresearch onboard
+```
+
+Guided setup for `.env`, problem scope, data import, labels, split fractions, and baseline verification. If your data is not ready, leave the data-file prompt blank and come back later.
+
+```bash
+autoresearch loop --ui
+```
+
+Open the classic Codex UI with the autoresearch prompt injected. This is the best default while developing because it is readable and steerable.
+
+```bash
+autoresearch loop
+```
+
+Run the recursive non-interactive Codex loop. Each iteration writes `runs/agent/<timestamp>/events.jsonl`, `last_message.md`, `stderr.log`, and `session_id.txt`, plus an index at `runs/agent/index.tsv`.
+
+```bash
+autoresearch loop --once
+autoresearch loop --resume <codex-session-id>
+```
+
+Run one non-interactive iteration, or resume a captured session in the classic UI.
+
+```bash
+autoresearch monitor
+autoresearch monitor --watch
+```
+
+Show the active session, what it is trying to accomplish, unfinished runs, current best scores, and summary stats.
+
+```bash
+autoresearch index
+autoresearch index --status active
+autoresearch verify runs/baseline_classifier/001_baseline
+autoresearch data validate
+autoresearch data import ./data.csv --id-field id --label-field label --input-fields text
+autoresearch new-experiment <short_name> --idea-id IDEA-001
+```
+
+Project traversal, evaluation, data validation/import, and run generation.
+
+## Make Shortcuts
+
+```bash
+make start          # create .venv, install CLI, verify starter baseline
+make onboard        # same as autoresearch onboard
+make loop-ui        # same as autoresearch loop --ui
+make loop           # same as autoresearch loop
+make monitor        # same as autoresearch monitor
+make monitor-watch  # same as autoresearch monitor --watch
+make test           # smoke-test the harness
+```
 
 ## Files That Matter
 
@@ -61,7 +88,9 @@ autoresearch --help
 - `scoring_config.yaml`: schema and scorer contract.
 - `runs/`: experiment tree and artifacts.
 - `results.tsv`: append-only experiment ledger.
-- `architecture.md`: deeper rules for agents and maintainers.
+- `ideas.md`: backlog and high-level results.
+- `skills/autoresearch/SKILL.md`: agent operating contract.
+- `architecture.md`: deeper rules for maintainers.
 
 ## Default Data Shape
 
