@@ -166,12 +166,31 @@ def _configure_labels(root: Path, labels: list[str]) -> None:
     console.print("[green]Updated scoring_config.yaml labels[/green]")
 
 
+def _print_data_skip_guidance() -> None:
+    console.print("[yellow]Skipped data import.[/yellow]")
+    console.print(
+        "When the data is ready, rerun `autoresearch onboard` or use "
+        "`autoresearch data import <file> --id-field ... --label-field ... --input-fields ...`."
+    )
+    console.print(
+        "If the source is not ready for direct ingestion, give the coding agent one representative "
+        "file and ask it to migrate that source into `data/*.jsonl` using the repo data contract."
+    )
+
+
 def _import_data(root: Path) -> None:
-    path_value = inquirer.filepath(message="CSV/JSON/JSONL data file:", validate=lambda p: Path(p).exists()).execute()
+    path_value = inquirer.filepath(
+        message="CSV/JSON/JSONL data file (blank to skip):",
+        mandatory=False,
+        validate=lambda p: not str(p).strip() or Path(str(p).strip()).expanduser().exists(),
+    ).execute()
+    if not str(path_value).strip():
+        _print_data_skip_guidance()
+        return
     path = Path(path_value).expanduser().resolve()
     rows = read_tabular(path)
     if not rows:
-        raise SystemExit("No rows found")
+        raise SystemExit(f"No rows found in {path}")
     columns = list(rows[0].keys())
     id_field = inquirer.select(message="ID field:", choices=columns).execute()
     label_field = inquirer.select(message="Label field:", choices=columns).execute()

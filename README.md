@@ -23,6 +23,8 @@ autoresearch onboard
 
 `autoresearch onboard` opens a guided setup flow for API-key entry, problem scope, data import, id/input/label column selection, train/validation/holdout split fractions, and baseline verification.
 
+If your data is not ready yet, leave the data-file prompt blank. Onboarding will keep going. Later, either rerun onboarding with a CSV/JSON/JSONL file, run `autoresearch data import`, or give the coding agent one representative source file and ask it to migrate that source into `data/*.jsonl`.
+
 After that:
 
 ```bash
