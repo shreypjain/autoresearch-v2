@@ -35,6 +35,8 @@ If your data is not ready, leave the onboarding data prompt blank. Later you can
 make start      # install and verify the starter project
 make onboard    # guided setup
 make loop       # recursive agent loop
+make loop-ui    # same prompt in the classic Codex UI
+make resume SESSION=<codex-session-id>
 make test       # smoke-test the harness
 make verify RUN=runs/baseline_classifier/001_baseline
 ```
@@ -45,6 +47,8 @@ Activate the environment when you want direct CLI access:
 source .venv/bin/activate
 autoresearch --help
 ```
+
+`make loop` writes each Codex exec run under `runs/agent/<timestamp>/` with `events.jsonl`, `last_message.md`, `stderr.log`, and `session_id.txt`. It also appends `runs/agent/index.tsv` so you can resume or inspect previous runs without reading a giant terminal stream.
 
 ## Files That Matter
 

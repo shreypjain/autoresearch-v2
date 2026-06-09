@@ -13,3 +13,5 @@ runs/**/metrics.json
 runs/**/predictions.jsonl
 runs/**/plots/*.png
 runs/readme_index.json
+runs/agent.log
+runs/agent/

@@ -65,9 +65,20 @@ def verify(run: str = typer.Argument(..., help="Run directory, e.g. runs/baselin
 
 
 @app.command()
-def loop() -> None:
+def loop(
+    ui: bool = typer.Option(False, "--ui", help="Open the classic interactive Codex UI."),
+    once: bool = typer.Option(False, "--once", help="Run one non-interactive Codex exec iteration."),
+    resume: Optional[str] = typer.Option(None, "--resume", help="Resume a saved Codex session id in the classic UI."),
+) -> None:
     """Start the Codex autoresearch loop."""
-    _run(["scripts/agent_loop.sh"])
+    command = ["scripts/agent_loop.sh"]
+    if ui:
+        command.append("--ui")
+    elif once:
+        command.append("--once")
+    elif resume:
+        command.extend(["--resume", resume])
+    _run(command)
 
 
 @app.command("new-experiment")

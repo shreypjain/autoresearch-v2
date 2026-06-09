@@ -1293,36 +1293,32 @@ timeout seconds:
 ### Simple shell loop
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-while true; do
-  codex exec \
-    "Read problem.md, architecture.md, and skills/autoresearch/SKILL.md. Run autoresearch index, inspect ideas.md, results.tsv, and the current runs tree. Create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it." \
-    2>&1 | tee -a runs/agent.log
-
-  sleep 1
-done
+make loop
 ```
 
-### Resume-session loop
+The non-interactive loop should avoid dumping a whole Codex transcript into one terminal buffer. Each iteration writes a small run folder:
 
-If the agent supports session resume:
+```text
+runs/agent/<timestamp>/events.jsonl
+runs/agent/<timestamp>/last_message.md
+runs/agent/<timestamp>/stderr.log
+runs/agent/<timestamp>/session_id.txt
+runs/agent/index.tsv
+```
+
+The terminal should print the paths and the resume command, not the full event stream.
+
+### Classic UI and Resume
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-SESSION_ID="${1:?usage: agent_loop.sh <session_id>}"
-
-while true; do
-  codex exec resume "$SESSION_ID" \
-    "Continue from the last state. Read problem.md, run autoresearch index, then create the next experiment by cd'ing into the chosen runs/<branch> directory and running new-experiment. Use scripts/verify.sh. If an experiment completed, inspect results, plots, README findings, and metrics; log it, accept/reject it, and start the next one." \
-    2>&1 | tee -a runs/agent.log
-
-  sleep 1
-done
+make loop-ui
+make resume SESSION=<codex-session-id>
+codex resume --include-non-interactive <codex-session-id>
 ```
+
+Use the classic Codex UI when readability and steering matter more than unattended recursion. Use the non-interactive loop when the agent should keep generating experiments.
+
+The wrapper should capture any Codex session id emitted by JSON events so a human can resume the exact run rather than guessing from terminal scrollback.
 
 ### Loop contract
 

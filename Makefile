@@ -1,4 +1,4 @@
-.PHONY: bootstrap start setup onboard tui demo-data clean-data index new-experiment verify freeze verify-freeze loop test
+.PHONY: bootstrap start setup onboard tui demo-data clean-data index new-experiment verify freeze verify-freeze loop loop-once loop-ui resume test
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -48,6 +48,16 @@ verify-freeze:
 
 loop:
 	$(PY) -m autoresearch.cli loop
+
+loop-once:
+	$(PY) -m autoresearch.cli loop --once
+
+loop-ui:
+	$(PY) -m autoresearch.cli loop --ui
+
+resume:
+	@if [ -z "$(SESSION)" ]; then echo "usage: make resume SESSION=<codex-session-id>"; exit 2; fi
+	$(PY) -m autoresearch.cli loop --resume "$(SESSION)"
 
 test:
 	$(PY) -m compileall -q .
