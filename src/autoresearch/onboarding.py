@@ -17,6 +17,14 @@ from .scoring import load_scoring_config
 console = Console()
 
 
+def _selection_summary(values: list[str]) -> str:
+    if not values:
+        return "none selected"
+    if len(values) == 1:
+        return "1 selected"
+    return f"{len(values)} selected"
+
+
 def _write_env(root: Path) -> None:
     env_path = root / ".env"
     template = (root / ".env.example").read_text(encoding="utf-8")
@@ -127,7 +135,11 @@ def _import_data(root: Path) -> None:
     columns = list(rows[0].keys())
     id_field = inquirer.select(message="ID field:", choices=columns).execute()
     label_field = inquirer.select(message="Label field:", choices=columns).execute()
-    input_fields = inquirer.checkbox(message="Input/text fields:", choices=[column for column in columns if column != label_field]).execute()
+    input_fields = inquirer.checkbox(
+        message="Input/text fields:",
+        choices=[column for column in columns if column != label_field],
+        transformer=_selection_summary,
+    ).execute()
     validation_pct = float(inquirer.text(message="Validation split fraction:", default="0.2").execute())
     holdout_pct = float(inquirer.text(message="Holdout split fraction:", default="0.1").execute())
     dataset_version = inquirer.text(message="Dataset version:", default="dataset-v1").execute()
@@ -164,6 +176,7 @@ def run_onboarding() -> int:
             {"name": "Verify baseline run", "value": "verify", "enabled": True},
             {"name": "Open TUI dashboard", "value": "tui", "enabled": False},
         ],
+        transformer=_selection_summary,
     ).execute()
     if "env" in actions:
         _write_env(root)
@@ -179,4 +192,3 @@ def run_onboarding() -> int:
         run_tui()
     console.print("[green]Onboarding complete[/green]")
     return 0
-
