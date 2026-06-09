@@ -164,24 +164,24 @@ The creative surface is the candidate. The harness, schema, scorer, metadata, an
 
 Rule-based baselines are useful at the beginning, but do not keep adding hand-written validation-selected clauses after the first few probes.
 
-If the loop has already tried several heuristic or rule branches and the best ideas are becoming narrow exceptions, start a train-fitted model branch. Use `fit(train_rows)` to learn from train labels only. Validation is for scoring and acceptance, not for selecting subject names, model names, thresholds, or per-segment exceptions.
+If the loop has already tried several heuristic or rule branches and the best ideas are becoming narrow exceptions, start a train-fitted model branch. Use `fit(train_rows)` to learn from train labels only. Validation is for scoring and acceptance, not for selecting category names, source names, thresholds, or per-segment exceptions.
 
 Acceptable next model branches include:
 
-- answer-level logistic regression or linear model using train-only features
-- tree-based model over structured response, vote, confidence, model-name, and subject features
-- train-only cross-validated ranker that scores each candidate answer and chooses the best
-- calibration/backoff model that learns when to trust mode, a model answer, or an aggregate response feature
+- output-level logistic regression or linear model using train-only features
+- tree-based model over structured row fields, categorical metadata, confidence, and aggregate features
+- train-only cross-validated ranker that scores each candidate output and chooses the best
+- calibration/backoff model that learns when to trust a baseline, a candidate output, or an aggregate feature
 - small neural net only after classical train-fitted models plateau
 
-For answer-selection tasks, prefer a train-fitted answer/ranker formulation:
+For selection tasks, prefer a train-fitted candidate/ranker formulation:
 
-1. In `fit(train_rows)`, build training examples for each row/answer choice from train labels only.
+1. In `fit(train_rows)`, build training examples for each row/candidate choice from train labels only.
 2. Learn parameters, thresholds, or model weights using train rows or a train-internal split.
 3. In `predict(row)`, score candidate answers without seeing labels.
 4. Report train and validation performance separately.
 
-Do not repeatedly inspect validation outcomes and add clauses like "if subject is X and model is Y." That is validation hillclimbing. Once that pattern appears, stop and either run stress/holdout/resplit or move to a broader train-fitted model.
+Do not repeatedly inspect validation outcomes and add clauses like "if category is X and source is Y." That is validation hillclimbing. Once that pattern appears, stop and either run stress/holdout/resplit or move to a broader train-fitted model.
 
 ## Schema And Scoring
 
@@ -275,13 +275,13 @@ If the current best is driven by increasingly narrow validation-selected clauses
 
 Example pattern:
 
-- baseline mode vote is `0.5769`
-- current best rises to `0.7692`
-- validation has only 26 rows
-- the candidate adds clauses like Genetics/Molecular Biology with model 2, Organic Chemistry with model 3, and Chemistry (general) with model 4
-- train accuracy remains below the mode baseline while validation keeps improving
+- the baseline is simple and stable
+- the validation set is small
+- current best improves validation by adding several narrow category/source overrides
+- train performance remains flat or worse while validation keeps improving
+- each new improvement depends on inspecting a smaller slice of validation behavior
 
-That pattern may be a real dataset insight, but it is also a classic validation-hillclimbing risk. Stop adding more subject/model clauses. Summarize the risk, run stress/holdout or a different split if allowed, or archive the branch and move to a broader train-fitted model idea.
+That pattern may be a real dataset insight, but it is also a classic validation-hillclimbing risk. Stop adding more per-segment clauses. Summarize the risk, run stress/holdout or a different split if allowed, or archive the branch and move to a broader train-fitted model idea.
 
 ## Blocking
 
