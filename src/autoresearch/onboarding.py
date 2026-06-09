@@ -25,6 +25,18 @@ def _selection_summary(values: list[str]) -> str:
     return f"{len(values)} selected"
 
 
+def _answer_or_todo(value: str, prompt: str) -> str:
+    cleaned = value.strip()
+    return cleaned if cleaned else f"TODO: {prompt}"
+
+
+def _slug(value: str) -> str:
+    slug = "".join(character.lower() if character.isalnum() else "_" for character in value).strip("_")
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug or "custom_problem"
+
+
 def _write_env(root: Path) -> None:
     env_path = root / ".env"
     template = (root / ".env.example").read_text(encoding="utf-8")
@@ -48,22 +60,46 @@ def _write_problem(root: Path) -> None:
         overwrite = inquirer.confirm(message="problem.md exists. Replace scope?", default=False).execute()
     if not overwrite:
         return
-    name = inquirer.text(message="Problem name:", default="custom_classification_task").execute()
-    goal = inquirer.text(message="Measurable goal:", default="Improve validation accuracy over the baseline.").execute()
-    application = inquirer.select(
-        message="Eventual application:",
-        choices=[
-            "offline batch scoring",
-            "online prediction endpoint",
-            "ranking pipeline",
-            "forecasting job",
-            "optimization routine",
-            "human decision-support workflow",
-        ],
-        default="offline batch scoring",
-    ).execute()
-    baseline = inquirer.text(message="Baseline goal:", default="beat_majority_class_baseline").execute()
-    problem_scope_id = f"{name.replace(' ', '_').lower()}-v1"
+    console.print("[bold]Problem scope[/bold]")
+    console.print("[dim]Answer in short phrases. Leave blank to create a TODO in problem.md.[/dim]")
+    name = inquirer.text(message="Short problem name:", default="custom_classification_task").execute()
+    problem = _answer_or_todo(
+        inquirer.text(message="What should the model choose or predict?").execute(),
+        "Describe what the model should choose or predict.",
+    )
+    goal = _answer_or_todo(
+        inquirer.text(message="What metric should improve first?").execute(),
+        "Define the first measurable metric to improve.",
+    )
+    application = _answer_or_todo(
+        inquirer.text(message="Where will the winning model be used in production?").execute(),
+        "Name the production placement, such as batch job, API endpoint, ranking step, or internal tool.",
+    )
+    baseline = _answer_or_todo(
+        inquirer.text(message="What simple baseline should the first real experiment beat?").execute(),
+        "Define the simple benchmark the first real experiment must beat, such as majority class, current heuristic, or previous model.",
+    )
+    inputs = _answer_or_todo(
+        inquirer.text(message="What input columns or fields matter most?").execute(),
+        "List the important input fields.",
+    )
+    output = _answer_or_todo(
+        inquirer.text(message="What should one prediction contain?").execute(),
+        "Describe the expected prediction fields.",
+    )
+    constraints = _answer_or_todo(
+        inquirer.text(message="Any hard constraints?").execute(),
+        "List runtime, dependency, interpretability, privacy, or deployment constraints.",
+    )
+    non_goals = _answer_or_todo(
+        inquirer.text(message="What should the agent avoid?").execute(),
+        "List non-goals or forbidden approaches.",
+    )
+    starting_ideas = _answer_or_todo(
+        inquirer.text(message="Any starting experiment ideas?").execute(),
+        "Seed a few initial ideas.",
+    )
+    problem_scope_id = f"{_slug(name)}-v1"
     frontmatter = {
         "name": name,
         "kind": "problem_scope",
@@ -76,7 +112,7 @@ def _write_problem(root: Path) -> None:
     }
     body = f"""# Problem
 
-{name}
+{problem}
 
 ## Goal
 
@@ -90,28 +126,32 @@ def _write_problem(root: Path) -> None:
 
 {baseline}
 
+The baseline goal is the first simple benchmark the loop must beat. It is not the final product goal. Good examples are majority-class accuracy, a simple threshold rule, an existing heuristic, or the current production model.
+
 ## Inputs and Outputs
 
-Rows are normalized into `id`, `text`, and `label`. Candidates emit `id`, `predicted_label`, and `confidence`.
+Inputs: {inputs}
+
+Prediction output: {output}
+
+Default normalized row shape is `id`, `text`, and `label`. Default prediction shape is `id`, `predicted_label`, and `confidence`. Update this section if your data or schema differs.
 
 ## Constraints
 
-- Use dependencies already declared in `pyproject.toml`.
-- Keep runs reproducible with `AUTORESEARCH_SEED`.
-- Do not read holdout rows or labels directly.
+{constraints}
 
 ## Non-Goals
 
-- Do not change evaluator, scoring, schema, or dataset construction from candidate runs.
+{non_goals}
 
 ## Useful Starting Ideas
 
-- Majority-class baseline.
-- Keyword or threshold baseline.
-- Simple linear or tree model after the baseline is verified.
+{starting_ideas}
 """
     write_frontmatter(problem_path, frontmatter, body)
     console.print("[green]Wrote problem.md[/green]")
+    if "TODO:" in body:
+        console.print("[yellow]problem.md contains TODOs. Fill them in before starting the agent loop.[/yellow]")
 
 
 def _configure_labels(root: Path, labels: list[str]) -> None:
