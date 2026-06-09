@@ -37,8 +37,8 @@ This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM 
      - Important to generate adversarial tests to mitigate against this.
 
 3. **Parallel candidate generation**
-   - Multiple agents or multiple branches should be able to test ideas concurrently.
-     - Should be in different branches of code, so not an issue to have separate agents creating and running these experiments.
+   - The initial system should run as a single-agent loop to preserve context and avoid burning tokens across poorly coordinated agents.
+   - Multiple branches should still be supported in the file tree, but multi-agent execution is a later capability, not the default.
    - Good ideas should be merged into a best-so-far branch.
      - Space for improvement should be measured here (ability to hill climb train dataset accuracy)
    - Bad ideas should be discarded but logged.
@@ -104,6 +104,10 @@ agentic-experiments/
   README.md
   architecture.md
   problem.md                    # human-readable problem scope and baseline goal
+  .env.example
+  .env                          # created from .env.example, not committed
+  pyproject.toml
+  Makefile
 
   skills/
     autoresearch/
@@ -164,6 +168,7 @@ agentic-experiments/
 
   scripts/
     new_experiment.py
+    new-experiment              # terminal entrypoint / wrapper
     verify.sh
     run_experiment.sh
     run_parallel_candidates.sh
@@ -189,6 +194,7 @@ status: active
 primary_metric: validation_accuracy
 baseline_goal: beat_majority_class_baseline
 target_application: batch_decision_support
+problem_scope_id: example_classification_task-v1
 owner: human
 ---
 
@@ -251,6 +257,38 @@ The agent should treat `problem.md` as guidance, not as scoring authority. The e
 
 The baseline goal in `problem.md` should be intentionally modest. It is not the final ambition; it is the first sanity check that the harness, schema, scoring, and experiment generator are all working.
 
+`problem.md` is a creation-time scope artifact. It should be written during project setup and then treated as immutable by the experiment loop. If the problem, application, baseline goal, or constraints materially change, create a new `problem_scope_id` and a new experiment scope rather than editing the existing file in place. The root `README.md` should document this rule so humans and agents know that post-creation scope changes invalidate the current experiment thread.
+
+---
+
+## Environment Defaults
+
+The repo should ship with a reproducible local environment.
+
+Required files:
+
+```text
+pyproject.toml     = pinned runtime and ML dependencies
+Makefile           = setup, test, verify, and loop commands
+.env.example       = documented environment variables
+.env               = local copy created from .env.example, not committed
+```
+
+Default `.env.example` values should include:
+
+```dotenv
+AUTORESEARCH_SEED=42
+AUTORESEARCH_TIMEOUT_SECONDS=3600
+AUTORESEARCH_MAX_MEMORY_MB=0
+OPENAI_API_KEY=placeholder
+```
+
+Candidates should default to deterministic execution with seed `42`. The seed should be configurable through `.env`, written into `config.json`, and copied into `metrics.json` so reruns are explainable.
+
+Dependencies should be predeclared in `pyproject.toml`; candidates should not freely add new packages during ordinary runs. Start with standard scientific and ML dependencies such as NumPy, pandas, scikit-learn, PyTorch, matplotlib, and lightweight utility packages. New dependencies require a scope or harness-level decision, not a candidate-only mutation.
+
+Project setup should copy `.env.example` to `.env` immediately, leaving placeholder values such as `OPENAI_API_KEY=placeholder` until a human supplies real credentials.
+
 ---
 
 ## Editable vs Frozen Boundary
@@ -280,7 +318,7 @@ data/
 scripts/compare_results.py
 ```
 
-If the agent believes the evaluator is wrong, it should write a note in `evaluator_issues.md`, not edit the evaluator. The agent can pick this up, temporarily unlock the issues with the evaluator (with a human's notice by terminating execution of the loop) and then wait for how to address and edit that while a human is actively in the loop.
+If the agent believes the evaluator is wrong, it should write a note in `evaluator_issues.md`, not edit the evaluator. The agent may read evaluator errors and consistency-check output, but it should not create ad hoc files to work around data or evaluator problems. If the blocker is a data issue, holdout leak, malformed split, or evaluator inconsistency, stop the loop and report a `data_blockage` or `data_analysis_issue` with the specific evidence needed for a human to decide whether the frozen layer should change.
 
 ---
 
@@ -320,9 +358,24 @@ plots/              = generated graphs, including loss / score curves where appl
 README.md           = short finding, accept/reject call, and potential follow up candidates
 ```
 
+The `plots/` directory should always exist. Plots are conditional on the system being evaluated: learned models should emit loss/score curves, deterministic heuristics can emit score comparison plots or a README note explaining why a plot is not applicable.
+
 The branch-level `README.md` should summarize the most interesting result in that folder, including the strongest hyperparameters and why they mattered.
 
 Use the same folder when only hyperparameters change. Create a new top-level folder when the model architecture or search direction changes. If a candidate is unrelated to the current thread, step back to the nearest shared parent or create a new root-level branch under `runs/`.
+
+Structural changes that should create a new branch include:
+
+```text
+new feature family
+new model class
+new architecture
+new attention head or sequence mechanism
+new dependency
+new training procedure
+```
+
+Schema-compatible output formatting inside `predict(row)` is a candidate correctness fix inside the current run. A new output post-processor outside `predict(row)` is not a run-level experiment; it is a harness/generator scope change and should stop the loop for human review.
 
 `ideas.md` should stay append-only and should record:
 
@@ -336,6 +389,8 @@ interesting hyperparameters tuned
 high-level result
 next branch to try
 ```
+
+The source of truth for the current best candidate is the actual accepted run directory, not a mutable copy in `best/`. `best/` may exist as a convenience pointer or materialized export, but it must be regenerable from `runs/`, `results.tsv`, and the selected run metadata.
 
 ---
 
@@ -366,7 +421,9 @@ runs/threshold_tuning/
     plots/
 ```
 
-The command infers the branch from the current directory, finds the highest existing numeric prefix, increments it, and writes the new folder beside the previous experiments. A repo-root script can still back the command, but the human and agent interface should feel like this:
+The command infers the branch from the current directory, finds the highest existing numeric prefix, increments it, and writes the new folder beside the previous experiments. It should use atomic directory creation so a collision fails cleanly instead of overwriting an existing run. Multi-agent execution is not the initial target, but this guard prevents accidental duplicate run numbers.
+
+A repo-root script can still back the command, but the human and agent interface should feel like this:
 
 ```bash
 cd runs/<branch>
@@ -410,12 +467,17 @@ The generated `config.json` should point at the frozen scorer and schema:
 ```json
 {
   "idea_id": "IDEA-014",
+  "problem_scope_id": "example_classification_task-v1",
   "branch": "threshold_tuning",
   "run_name": "003_calibrated_threshold",
   "parent": "runs/threshold_tuning/002_lower_threshold",
   "created_from_directory": "runs/threshold_tuning",
   "scoring_config": "scoring_config.yaml",
   "primary_scorer": "accuracy",
+  "scorer_id": "accuracy-v1",
+  "schema_version": 1,
+  "dataset_version": "dataset-v1",
+  "seed": 42,
   "prediction_schema": "scoring_config.yaml:prediction_schema",
   "splits": ["train", "validation"]
 }
@@ -430,7 +492,12 @@ kind: experiment_run
 status: created
 parent: runs/threshold_tuning/002_lower_threshold
 idea_id: IDEA-014
+problem_scope_id: example_classification_task-v1
 primary_scorer: accuracy
+scorer_id: accuracy-v1
+schema_version: 1
+dataset_version: dataset-v1
+seed: 42
 prediction_schema: scoring_config.yaml:prediction_schema
 tags:
   - threshold
@@ -451,6 +518,15 @@ the current directory is not inside runs/
 the next numeric run directory already exists
 there is no previous run and --root is not explicitly passed
 the command would create files outside the current branch folder
+```
+
+`new-experiment` should be reliable from any `runs/<branch>` directory. If required fields are missing, it should prompt on stdin using clean text prompts or simple multiple-choice selections so a coding agent can fill them in without a GUI:
+
+```text
+short name:
+idea id:
+parent run:
+tags:
 ```
 
 This keeps experiment creation boring and repeatable. The creative surface is one function; the harness, schema, scorer, metadata, and directory shape are created deterministically.
@@ -485,6 +561,22 @@ next:
 ---
 ```
 
+Run status must use a fixed enum:
+
+```text
+created
+running
+schema_failed
+failed
+rejected
+accepted
+promoted
+archived
+stale_due_to_rescore
+```
+
+Use `archived` for runs that are intentionally kept for history but no longer active. Use `stale_due_to_rescore` when a scorer, schema, or dataset version changed and the old metrics are no longer comparable.
+
 Use the same shape at different levels:
 
 ```text
@@ -496,6 +588,17 @@ runs/<branch>/<NNN_name>/README.md = run finding, decision, metrics pointer, nex
 ```
 
 The front matter should be useful but not authoritative for scoring. `metrics.json`, `config.json`, `results.tsv`, and the frozen evaluator output remain the source of truth.
+
+Every run-level README front matter and `config.json` must include:
+
+```text
+problem_scope_id
+dataset_version
+schema_version
+scorer_id
+seed
+status
+```
 
 Add a walk / traversal command or function in the shell files and scripts:
 
@@ -540,6 +643,7 @@ load_scoring_config()
 load_expected_output_schema()
 run_candidate(candidate, dataset)
 validate_candidate_outputs(predictions, schema)
+run_consistency_checks(predictions, dataset)
 compute_metrics(predictions, labels)
 compute_primary_score(metrics)
 write_artifacts(run_dir)
@@ -562,11 +666,32 @@ evaluator scores valid predictions against labels / expected fields
 primary_score defaults to validation accuracy
 ```
 
+The evaluator should run consistency checks before scoring:
+
+```text
+all required splits produced predictions
+row counts match expected split row counts, unless missing-row tolerance applies
+row IDs are present
+row IDs are unique
+row IDs belong to the evaluated split
+no extra predictions are emitted
+ordering is deterministic or explicitly normalized before scoring
+prediction records match the configured schema
+metrics.json is well-formed and complete
+```
+
+Invalid records may be dropped only within the configured tolerance. The default tolerance is `5%` faulty rows for train/validation evaluation. If failures exceed the tolerance, the evaluator should return `schema_validation_failed` or `consistency_check_failed` and skip scoring. Holdout should default to stricter behavior unless the scoring config explicitly says otherwise.
+
 The schema should live in frozen harness config, not in editable candidate code:
 
 ```yaml
 task: classification
+schema_version: 1
+scorer_id: accuracy-v1
 primary_scorer: accuracy
+fault_tolerance:
+  validation_invalid_row_pct: 5.0
+  holdout_invalid_row_pct: 0.0
 prediction_schema:
   type: object
   required:
@@ -643,7 +768,18 @@ selected primary scorer = frozen for a run
 candidate implementation = editable
 ```
 
-If you change your primary_scorer, that should be cascaded and rerun against the evaluation set and rescored for all experiments. Scorers should have some kind of unique identifier hosted against it so that there can be YAML front matter keys on the exact scorer that it was evaluated against.
+Schema and scorer changes roll forward. Do not keep a growing pile of old schema files in the repo. When the schema or scorer changes:
+
+```text
+increment schema_version and/or scorer_id
+overwrite the current scoring_config.yaml intentionally
+use git diff to review the changed scoring/schema delta
+mark previous run rows stale_due_to_rescore
+rerun relevant experiments against the current evaluator and scoring config
+append new rows to results.tsv with the new schema_version and scorer_id
+```
+
+Old runs remain as historical artifacts, but old scores should not be compared against new scores unless they have been rerun under the current schema and scorer.
 
 ---
 
@@ -674,7 +810,13 @@ data/
 
 The agent should optimize against train and validation. It should not see holdout results on every run, otherwise it will overfit the holdout.
 
-The agent is allowed to comb through the evaluation dataset, but it is not allowed to see or comb through the holdout set. The holdout set should never go in context of the language model, the evaluation dataset can use basic transformation functions to parse through large pieces of data using `pandas` with those transformations sitting inside of scripts. You should do this because some of the datasets you'll wrangle with will be quite large (250k+ rows). Translation to columnar data formats and reads from that might become useful.
+The agent is allowed to comb through the evaluation dataset, but it is not allowed to see or comb through the holdout set. The holdout set should never go in context of the language model. For now this can be enforced as policy, with stronger filesystem or evaluator-only access controls added later.
+
+If the agent sees holdout labels, holdout distributions, or derived holdout leakage in `data/README.md`, `manifest.json`, logs, or artifacts, it should stop and report a data blockage issue. The data should be pruned or regenerated before the loop continues, and the agent should clear that leaked context before using holdout-derived information.
+
+The evaluation dataset can use basic transformation functions to parse through large pieces of data using `pandas` with those transformations sitting inside of scripts. You should do this because some of the datasets you'll wrangle with will be quite large (250k+ rows). Translation to columnar data formats and reads from that might become useful.
+
+`stress.jsonl` should contain adversarial, rare, corrupted, shifted, or boundary-condition examples. Later, a dedicated generation agent or script can propose new stress rows from observed failure modes, but those generated stress cases should be reviewed before they become part of the frozen evaluator set.
 
 Recommended policy:
 
@@ -683,6 +825,16 @@ Run train + validation every experiment.
 Run holdout every 10 accepted improvements.
 Run stress every 5 accepted improvements or before merge.
 ```
+
+`results.tsv` is append-only. If a row is wrong, do not edit it in place. Append a correction row with:
+
+```text
+correction_of
+supersedes_run_id
+correction_reason
+```
+
+Consumers should treat the latest non-superseded row for a run as the active ledger entry.
 
 ---
 
@@ -722,7 +874,9 @@ The system should strongly prefer the simplest strategy that improves the metric
 
 ## Parallel Candidate Runs
 
-A useful harness should support parallel exploration.
+A useful harness should support parallel exploration in the file tree, but the initial execution model should stay single-agent.
+
+Do not run multiple coding agents by default. It burns tokens quickly and loses context between agents. Parallel branches can still exist as candidate directions, but one agent should choose, run, and evaluate them sequentially until there is enough infrastructure to coordinate multi-agent work safely.
 
 Recommended pattern:
 
@@ -968,11 +1122,39 @@ A complex model that cannot run in the intended environment is not a real improv
 
 ---
 
+## Plateau Detection
+
+The agent should inspect generated plots, score curves, loss curves, and noisy-run summaries before deciding that a branch has plateaued.
+
+Useful plateau signals:
+
+```text
+no accepted improvement after several valid runs
+loss curves flatten while validation score stops improving
+multiple epochs produce negligible metric movement
+candidate improvements are smaller than run-to-run noise
+validation changes are unstable across seeds or shards
+stress checks regress even when validation improves
+```
+
+When a branch plateaus, the agent should summarize the evidence in the branch README, mark the branch `archived` if appropriate, and walk back up the run tree to a different branch or root-level idea.
+
+---
+
 ## Agent Loop: How to Keep It Running
 
 The markdown instruction alone is not enough. Many coding agents eventually stop.
 
 Use an external loop, and keep a one-command verification path.
+
+Experiment commands may be long-running. Scripts should use generous default timeouts, write logs continuously, and keep the evaluation in a background process when appropriate so progress can be tailed without losing artifacts:
+
+```text
+timeout defaults should come from .env
+stdout/stderr should stream into run.log
+process id should be recorded when a background run starts
+timeouts, memory exits, dependency import errors, disk-full errors, and malformed metrics.json should become structured evaluator failures
+```
 
 ### Verification script
 
@@ -994,6 +1176,15 @@ python evaluator.py \
 ```
 
 The agent loop may wrap this script, but it should not invent a separate verification path per experiment.
+
+`verify.sh` should resolve the repo root from the script location rather than trusting the caller's current directory. If required values are missing, it should prompt on stdin with simple text or multiple-choice fields that a coding agent can answer:
+
+```text
+run directory:
+splits to evaluate:
+background run? [yes/no]
+timeout seconds:
+```
 
 ### Simple shell loop
 
@@ -1048,6 +1239,9 @@ run command cannot execute
 permissions are missing
 all candidate branches fail to run
 human approval is required for a dangerous action
+loss curve plateaus and no useful next branch is available
+multiple valid experiments show no improvement
+convergence is too noisy to distinguish improvements
 ```
 
 If blocked, the agent should write:
@@ -1135,8 +1329,6 @@ Reject any candidate with:
 - materially worse secondary metrics without compensating primary-score improvement
 - excessive runtime or memory usage
 - unsupported dependencies
-- evaluator errors
-- data leakage
 
 If the evaluator returns `schema_validation_failed`, do not mark it as a scored rejection. Treat it as candidate feedback, fix the output shape in editable code, and rerun the same numbered experiment until it either validates or is abandoned.
 
@@ -1145,7 +1337,7 @@ If the evaluator returns `schema_validation_failed`, do not mark it as a scored 
 Append to `results.tsv`:
 
 ```tsv
-timestamp commit branch idea_id status primary_score validation_accuracy holdout_score runtime_seconds memory_mb scorer_id notes
+timestamp commit branch idea_id status primary_score validation_accuracy holdout_score runtime_seconds memory_mb scorer_id schema_version dataset_version correction_of supersedes_run_id notes
 ```
 
 ## Candidate discipline
@@ -1240,6 +1432,9 @@ one `problem.md`
 one results.tsv
 one `skills/autoresearch/SKILL.md`
 one loop script
+one `.env.example`
+one `pyproject.toml`
+one `Makefile`
 ```
 
 Do not start by building a giant framework.
