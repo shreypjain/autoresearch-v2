@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 AGENT_DIR="${ROOT_DIR}/runs/agent"
+STOP_FILE="${AGENT_DIR}/stop_loop.json"
 MODE="${1:-exec}"
 RUN_FOREVER=1
 export PYTHONPATH="${ROOT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -14,17 +15,17 @@ if ! command -v codex >/dev/null 2>&1; then
   exit 127
 fi
 
-PROMPT="Read problem.md, architecture.md, skills/autoresearch/SKILL.md, and runs/agent/inbox.md if it exists. Treat inbox.md as the latest human steering. First do an interrupt/recovery scan: run autoresearch index, inspect results.tsv, ideas.md, best/README.md, and the current runs tree; find runs that were created but not verified, verified but not logged, or logged but not summarized. Continue the most recent useful unfinished run before creating anything new. If recent wins come from narrow validation-selected clauses, stop adding clauses and start a broader train-fitted model branch or run stress/holdout/resplit. If no unfinished run exists, create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not use scripts/new-experiment. Do not summarize unless blocked. If the last experiment finished, generate the next candidate and run it."
+PROMPT="Read AGENTS.md, problem.md, .agent/skills/autoresearch/SKILL.md, and runs/agent/inbox.md if it exists. Treat inbox.md as the latest human steering. First check whether runs/agent/stop_loop.json exists; if it does, stop after summarizing the current state and do not create a new experiment. Otherwise keep the loop moving: do an interrupt/recovery scan with autoresearch index, inspect results.tsv, ideas.md, best/README.md, and the current runs tree; find runs that were created but not verified, verified but not logged, or logged but not summarized. Continue the most recent useful unfinished run before creating anything new. If recent wins come from narrow validation-selected clauses, stop adding clauses and start a broader train-fitted model branch or run stress/holdout/resplit. If no unfinished run exists, create new candidates by cd'ing into the chosen runs/<branch> directory and running new-experiment, then verify with scripts/verify.sh. Do not use scripts/new-experiment. Do not summarize merely because one experiment finished. If the last experiment finished and no stop file exists, immediately generate the next candidate and run it."
 
 usage() {
   cat <<'EOF'
 usage: scripts/agent_loop.sh [--ui | --once | --resume SESSION_ID]
 
 Modes:
-  default              run recursive non-interactive Codex exec loop
+  default              run supervised infinite non-interactive Codex exec loop
   --once               run one non-interactive Codex exec iteration
-  --ui                 open the classic interactive Codex UI with the autoresearch prompt
-  --resume SESSION_ID  resume a saved Codex session in the classic UI
+  --ui                 open classic Codex UI with the prompt; manual/readable mode
+  --resume SESSION_ID  resume a saved Codex session in classic UI; manual mode
 EOF
 }
 
@@ -145,6 +146,7 @@ elif [[ "${MODE}" != "exec" ]]; then
 fi
 
 mkdir -p "${AGENT_DIR}"
+rm -f "${STOP_FILE}"
 INDEX_PATH="${AGENT_DIR}/index.tsv"
 if [[ ! -f "${INDEX_PATH}" ]]; then
   printf "started_at\tstatus\tsession_id\tjson_log\tlast_message\tstderr_log\n" > "${INDEX_PATH}"
@@ -201,6 +203,11 @@ while true; do
     exit "${STATUS}"
   fi
   if [[ "${RUN_FOREVER}" -eq 0 ]]; then
+    break
+  fi
+  if [[ -f "${STOP_FILE}" ]]; then
+    write_agent_state "stopped"
+    echo "autoresearch stop requested via ${STOP_FILE#${ROOT_DIR}/}"
     break
   fi
   sleep 1

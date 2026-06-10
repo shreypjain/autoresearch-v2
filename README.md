@@ -19,14 +19,14 @@ cd autoresearch-v2
 make start
 source .venv/bin/activate
 autoresearch onboard
-autoresearch loop --ui
+autoresearch loop
 ```
 
 That is the normal path:
 
 - `make start` creates the virtualenv, installs the CLI, creates starter files, and verifies the baseline.
 - `autoresearch onboard` guides API key entry, problem scope, data import, label fields, and train/validation/holdout split setup.
-- `autoresearch loop --ui` opens the readable Codex UI with the autoresearch loop prompt injected.
+- `autoresearch loop` starts the supervised infinite experiment loop.
 
 In every new terminal:
 
@@ -48,8 +48,9 @@ source .venv/bin/activate
 | Command | Use |
 | --- | --- |
 | `autoresearch onboard` | Guided first-time setup. You can leave data blank if it is not ready. |
-| `autoresearch loop --ui` | Start the classic Codex UI with the loop instructions injected. Best default. |
-| `autoresearch loop` | Run the recursive non-interactive loop. |
+| `autoresearch loop` | Run the supervised infinite loop. Best default. |
+| `autoresearch stop-loop "reason"` | Ask the supervised loop to stop after the current Codex turn. |
+| `autoresearch loop --ui` | Start the classic Codex UI with loop instructions injected. Manual/readable mode, not the supervisor. |
 | `autoresearch monitor` | See the active session, best score, unfinished runs, and summary stats. |
 | `autoresearch monitor --watch` | Keep the monitor open. |
 | `autoresearch nudge "message"` | Queue a human instruction for the tracked Codex session. |
@@ -68,11 +69,14 @@ autoresearch nudge "Stop adding validation-selected clauses; start a train-fitte
 autoresearch nudge --file note.md
 autoresearch nudge --clear "Replace the old steering with this instruction."
 autoresearch nudge --send-now "Read the inbox and move to confidence-word model training."
+autoresearch stop-loop "Stop after the current verification; I want to inspect results."
 ```
 
 Nudges are written to `runs/agent/inbox.md` and `runs/agent/nudges.jsonl`. The CLI records the latest Codex session id for this repo from Codex's local session metadata, so `autoresearch monitor` can show the exact session and resume command.
 
 Use `--send-now` when you want to immediately send the nudge through `codex exec resume <session_id>` instead of only queueing it for the next loop turn.
+
+`autoresearch loop` keeps launching Codex turns until it fails, is interrupted, or sees a stop request. `autoresearch stop-loop` writes `runs/agent/stop_loop.json` and appends a stop message to the inbox; the supervisor exits after the current Codex turn completes.
 
 For session recovery:
 
@@ -91,6 +95,7 @@ make setup          # repair/install the local CLI shims
 make onboard        # autoresearch onboard
 make loop-ui        # autoresearch loop --ui
 make loop           # autoresearch loop
+make stop-loop      # autoresearch stop-loop
 make monitor        # autoresearch monitor
 make monitor-watch  # autoresearch monitor --watch
 make test           # smoke-test the harness
@@ -118,7 +123,8 @@ autoresearch monitor
 - `runs/`: experiment tree and artifacts.
 - `results.tsv`: append-only experiment ledger.
 - `ideas.md`: backlog and high-level results.
-- `skills/autoresearch/SKILL.md`: agent operating contract.
+- `AGENTS.md`: generic coding-agent entrypoint.
+- `.agent/skills/autoresearch/SKILL.md`: agent skill for the experiment loop.
 - `architecture.md`: deeper rules for maintainers.
 
 Loop artifacts live under `runs/agent/`. Experiment artifacts live under `runs/<branch>/<numbered_experiment>/`.

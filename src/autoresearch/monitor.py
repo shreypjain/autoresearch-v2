@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -64,6 +65,48 @@ def _latest_nudge_event(root: Path) -> dict[str, str]:
     return latest
 
 
+def _codex_usage(root: Path) -> dict[str, int | float]:
+    usage = {
+        "turns": 0,
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_output_tokens": 0,
+    }
+    for path in sorted((root / "runs/agent").glob("*/events.jsonl")):
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") != "turn.completed" or not isinstance(event.get("usage"), dict):
+                continue
+            turn_usage = event["usage"]
+            usage["turns"] += 1
+            for key in ["input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens"]:
+                try:
+                    usage[key] += int(turn_usage.get(key) or 0)
+                except (TypeError, ValueError):
+                    continue
+    non_cached_input = max(usage["input_tokens"] - usage["cached_input_tokens"], 0)
+    input_rate = float(os.getenv("AUTORESEARCH_CODEX_INPUT_CREDITS_PER_1M", "125"))
+    cached_rate = float(os.getenv("AUTORESEARCH_CODEX_CACHED_INPUT_CREDITS_PER_1M", "12.5"))
+    output_rate = float(os.getenv("AUTORESEARCH_CODEX_OUTPUT_CREDITS_PER_1M", "750"))
+    usage["estimated_credits"] = (
+        (non_cached_input * input_rate)
+        + (usage["cached_input_tokens"] * cached_rate)
+        + (usage["output_tokens"] * output_rate)
+    ) / 1_000_000
+    return usage
+
+
+def _stop_request(root: Path) -> dict[str, str]:
+    stop_file = root / "runs/agent/stop_loop.json"
+    if not stop_file.exists():
+        return {}
+    return {key: str(value) for key, value in _read_json(stop_file).items()}
+
+
 def _score(row: dict[str, str]) -> float:
     try:
         return float(row.get("primary_score") or "-inf")
@@ -78,6 +121,10 @@ def _format_score(value: str | float | None) -> str:
         return f"{float(value):.4f}"
     except (TypeError, ValueError):
         return str(value)
+
+
+def _format_count(value: int | float) -> str:
+    return f"{int(value):,}"
 
 
 def _relative_time(value: datetime, now: datetime) -> str:
@@ -140,6 +187,7 @@ def _human_status(status: str) -> str:
         "stale_due_to_rescore": "stale after rescore",
         "ui_running": "classic UI running",
         "ui_resuming": "classic UI resuming",
+        "stopped": "stopped",
         "not tracked": "not tracked",
     }
     if status.startswith("failed:"):
@@ -160,6 +208,7 @@ def _status_style(status: str) -> str:
         "stale_due_to_rescore": "yellow",
         "ui_running": "cyan",
         "ui_resuming": "cyan",
+        "stopped": "dim",
         "not tracked": "dim",
     }
     if status.startswith("failed:"):
@@ -207,7 +256,12 @@ def _summarize_nudge(message: str) -> str:
 
 
 def _reconcile_results(results: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Collapse append-only ledger rows to the current row for each run."""
+    """Collapse append-only ledger rows to the current row for each run.
+
+    Promotion is a singleton selection in the reconciled view. Historical
+    promoted rows remain in results.tsv, but only the latest promoted row is
+    displayed as the current promoted run.
+    """
     current_by_run: dict[str, dict[str, str]] = {}
     corrections: set[str] = set()
     superseded: set[str] = set()
@@ -229,9 +283,21 @@ def _reconcile_results(results: list[dict[str, str]]) -> list[dict[str, str]]:
             continue
         if branch in superseded and row.get("supersedes_run_id") != branch:
             continue
-        reconciled.append(row)
+        reconciled.append(dict(row))
     reconciled.sort(key=lambda row: (row.get("timestamp", ""), row.get("branch", "")))
+    latest_promoted = next((row for row in reversed(reconciled) if row.get("status") == "promoted"), None)
+    if latest_promoted:
+        latest_key = (latest_promoted.get("timestamp", ""), latest_promoted.get("branch", ""))
+        for row in reconciled:
+            if row.get("status") == "promoted" and (row.get("timestamp", ""), row.get("branch", "")) != latest_key:
+                row["status"] = "accepted"
+                notes = row.get("notes", "")
+                row["notes"] = f"superseded by later promotion; {notes}" if notes else "superseded by later promotion"
     return reconciled
+
+
+def _current_promotion(rows: list[dict[str, str]]) -> dict[str, str]:
+    return next((row for row in reversed(rows) if row.get("status") == "promoted"), {})
 
 
 def _latest_agent_state(root: Path) -> dict[str, str]:
@@ -297,18 +363,22 @@ def _build_dashboard(root: Path) -> Panel:
     runs = _run_summaries(root, reconciled)
     agent = _latest_agent_state(root)
     latest_nudge = _latest_nudge_event(root)
+    stop_request = _stop_request(root)
+    usage = _codex_usage(root)
+    current_promotion = _current_promotion(reconciled)
     scored = [row for row in reconciled if row.get("primary_score")]
     scored.sort(key=_score, reverse=True)
     latest_result = reconciled[-1] if reconciled else {}
+    best_row = current_promotion or (scored[0] if scored else {})
 
     title = Table.grid(expand=True)
     title.add_column(ratio=1)
     title.add_column(ratio=1)
     active_status = agent.get("status") or "not tracked"
     prompt = _summarize_prompt(agent.get("prompt") or "")
-    best_score = _format_score(scored[0].get("primary_score", "")) if scored else "none"
+    best_score = _format_score(best_row.get("primary_score", "")) if best_row else "none"
     title.add_row("[bold cyan]Agent[/bold cyan]", f"[bold cyan]Best score[/bold cyan] [bold green]{best_score}[/bold green]")
-    title.add_row(f"agent status: {_styled_status(active_status)}", f"best run: {scored[0].get('branch', '') if scored else ''}")
+    title.add_row(f"agent status: {_styled_status(active_status)}", f"best run: {best_row.get('branch', '') if best_row else ''}")
     title.add_row(f"session: {_display_session(agent)}", f"latest run: {latest_result.get('branch', '')}")
     title.add_row(f"started: {_format_timestamp(agent.get('started_at'))}", f"latest result: {_styled_status(latest_result.get('status', ''))}")
     title.add_row("", f"latest result time: {_format_timestamp(latest_result.get('timestamp'))}")
@@ -321,6 +391,11 @@ def _build_dashboard(root: Path) -> Panel:
         title.add_row(
             "last nudge:",
             f"{sent_label} at {_format_timestamp(latest_nudge.get('timestamp'))}: {_summarize_nudge(latest_nudge.get('message', ''))}",
+        )
+    if stop_request:
+        title.add_row(
+            "[bold red]stop requested:[/bold red]",
+            f"{_format_timestamp(stop_request.get('timestamp'))}: {_summarize_nudge(stop_request.get('reason', ''))}",
         )
 
     active = Table(title="[bold italic]Active / Needs Attention[/bold italic]", expand=True, border_style="cyan")
@@ -346,7 +421,12 @@ def _build_dashboard(root: Path) -> Panel:
     best.add_column("run", overflow="fold")
     best.add_column("idea")
     best.add_column("notes", overflow="fold")
-    for row in scored[:8]:
+    display_rows = list(scored)
+    if current_promotion:
+        display_rows = [current_promotion] + [
+            row for row in scored if row.get("branch") != current_promotion.get("branch")
+        ]
+    for row in display_rows[:8]:
         best.add_row(
             f"[bold green]{_format_score(row.get('primary_score', ''))}[/bold green]",
             _styled_status(row.get("status", "")),
@@ -369,6 +449,13 @@ def _build_dashboard(root: Path) -> Panel:
     stats.add_row(f"runs on disk: {len(runs)}", f"raw ledger rows: {len(results)}")
     stats.add_row("current statuses:", status_text)
     stats.add_row("dataset:", latest_result.get("dataset_version", ""))
+    if usage["turns"]:
+        stats.add_row(
+            "codex usage:",
+            f"{_format_count(usage['turns'])} completed turns, {_format_count(usage['input_tokens'])} input tokens, "
+            f"{_format_count(usage['cached_input_tokens'])} cached, {_format_count(usage['output_tokens'])} output",
+        )
+        stats.add_row("estimated credits:", f"{float(usage['estimated_credits']):,.2f} using configured Codex token rates")
     if len(reconciled) != len(results):
         stats.add_row(f"current ledger runs: {len(reconciled)}", f"older superseded rows hidden: {len(results) - len(reconciled)}")
     if agent.get("json_log"):

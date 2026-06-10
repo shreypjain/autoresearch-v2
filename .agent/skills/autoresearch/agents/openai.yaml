@@ -1,0 +1,6 @@
+interface:
+  display_name: "Autoresearch"
+  short_description: "Run safe evaluator-driven experiments"
+  default_prompt: "Use $autoresearch to continue the experiment loop, verify unfinished runs, and log the next candidate result."
+policy:
+  allow_implicit_invocation: true

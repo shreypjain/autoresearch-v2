@@ -1,4 +1,4 @@
-.PHONY: bootstrap start setup onboard tui monitor monitor-watch demo-data clean-data index new-experiment verify freeze verify-freeze loop loop-once loop-ui resume test
+.PHONY: bootstrap start setup onboard tui monitor monitor-watch demo-data clean-data index new-experiment verify freeze verify-freeze loop loop-once loop-ui stop-loop resume test
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -86,6 +86,9 @@ loop-once:
 
 loop-ui:
 	$(RUN_PY) -m autoresearch.cli loop --ui
+
+stop-loop:
+	$(RUN_PY) -m autoresearch.cli stop-loop "$(MESSAGE)"
 
 resume:
 	@if [ -z "$(SESSION)" ]; then echo "usage: make resume SESSION=<codex-session-id>"; exit 2; fi

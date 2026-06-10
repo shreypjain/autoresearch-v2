@@ -152,6 +152,13 @@ def evaluate(args: argparse.Namespace) -> int:
             ordered_predictions = [str(by_id[str(row[id_field])]["predicted_label"]) for row in rows if str(row[id_field]) in by_id]
             ordered_labels = [str(row[label_field]) for row in rows if str(row[id_field]) in by_id]
             accuracy = classification_accuracy(ordered_labels, ordered_predictions)
+            baseline_scores: dict[str, float] = {}
+            for name, config in scoring.get("baselines", {}).items():
+                if config.get("kind") == "row_field_accuracy":
+                    field = str(config.get("field", ""))
+                    if field:
+                        baseline_predictions = [str(row.get(field, "")) for row in rows]
+                        baseline_scores[str(name)] = classification_accuracy(labels, baseline_predictions)
             metrics["splits"][split] = {
                 "row_count": len(rows),
                 "valid_prediction_count": len(ordered_predictions),
@@ -160,6 +167,7 @@ def evaluate(args: argparse.Namespace) -> int:
                 "accuracy": accuracy,
                 "balanced_accuracy": balanced_accuracy(ordered_labels, ordered_predictions),
                 "majority_baseline": majority_baseline(labels),
+                "baseline_scores": baseline_scores,
             }
 
         write_jsonl(predictions_path, all_predictions)

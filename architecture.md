@@ -25,49 +25,44 @@ This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM 
 ## Design Goals
 
 1. **Fast experimentation**
-   - Agents should be able to propose and test 1-5 candidate changes quickly.
-   - Experiments should run locally, in CI, or on single H100s with minimal setup.
-   - Results should be easy to compare across branches and runs.
-     - All results should have tags, be grouped by experiment types, and have a pointer to previous inspiration experiments.
-
+  - Agents should be able to propose and test 1-5 candidate changes quickly.
+  - Experiments should run locally, in CI, or on single H100s with minimal setup.
+  - Results should be easy to compare across branches and runs.
+    - All results should have tags, be grouped by experiment types, and have a pointer to previous inspiration experiments.
 2. **Strong evaluation boundaries**
-   - Agents may edit the candidate surface.
-   - Agents may not edit the evaluator / evaluation harness, holdout data, scoring rules, or dataset construction.
-   - The harness must prevent reward hacking wherever possible.
-     - Important to generate adversarial tests to mitigate against this.
-
+  - Agents may edit the candidate surface.
+  - Agents may not edit the evaluator / evaluation harness, holdout data, scoring rules, or dataset construction.
+  - The harness must prevent reward hacking wherever possible.
+    - Important to generate adversarial tests to mitigate against this.
 3. **Parallel candidate generation**
-   - The initial system should run as a single-agent loop to preserve context and avoid burning tokens across poorly coordinated agents.
-   - Multiple branches should still be supported in the file tree, but multi-agent execution is a later capability, not the default.
-   - Good ideas should be merged into a best-so-far branch.
-     - Space for improvement should be measured here (ability to hill climb train dataset accuracy)
-   - Bad ideas should be discarded but logged.
-     - There should be high level descriptions alongside `name`, `description`, and `tags` when describing these files (like YAML file for skills `name` and `description` tags).
-
+  - The initial system should run as a single-agent loop to preserve context and avoid burning tokens across poorly coordinated agents.
+  - Multiple branches should still be supported in the file tree, but multi-agent execution is a later capability, not the default.
+  - Good ideas should be merged into a best-so-far branch.
+    - Space for improvement should be measured here (ability to hill climb train dataset accuracy)
+  - Bad ideas should be discarded but logged.
+    - There should be high level descriptions alongside `name`, `description`, and `tags` when describing these files (like YAML file for skills `name` and `description` tags).
 4. **Generalized beyond LLMs**
-   - Works for classification, regression, ranking models, feature engineering, forecasting, optimization, RL-like policies, and classical ML.
-   - Does not require transformer training as the starting point. In fact, should be discouraged until upgrades are essential.
-   - Prioritize CPU bound smaller models, grow larger as signs of additional train set accuracy continues to go up.
-     - The bitter lesson scaling laws can be prioritized here, until it doesn't work and you need to destroy what you do completely.
-     - If you are hitting a complete wall, you might need to traverse multiple levels back and stop making additional improvements to this architecture that doesn't matter.
-   - **Important caveat**: There will be clear cases where you just don't have a feature rich enough dataset to improve accuracy on the test or hold out set. Data cleanliness, interpretability, and diversity is incredibly important as a result.
-
+  - Works for classification, regression, ranking models, feature engineering, forecasting, optimization, RL-like policies, and classical ML.
+  - Does not require transformer training as the starting point. In fact, should be discouraged until upgrades are essential.
+  - Prioritize CPU bound smaller models, grow larger as signs of additional train set accuracy continues to go up.
+    - The bitter lesson scaling laws can be prioritized here, until it doesn't work and you need to destroy what you do completely.
+    - If you are hitting a complete wall, you might need to traverse multiple levels back and stop making additional improvements to this architecture that doesn't matter.
+  - **Important caveat**: There will be clear cases where you just don't have a feature rich enough dataset to improve accuracy on the test or hold out set. Data cleanliness, interpretability, and diversity is incredibly important as a result.
 5. **Progressive search path**
-   - Start with simple, classical, interpretable approaches.
-     - Simple regressions, classifications, random forests, simple GANs, single head attentions if you need to and progress.
-     - The skill we build should have a progression function.
-   - Only move toward more complex models when simple baselines stop improving.
-     - There should be a clear mechanism for determining how you should improve.
-   - Maintain a clear record of why complexity was introduced and how to reverse your way out of it when you are hitting a local maxima.
-
+  - Start with simple, classical, interpretable approaches.
+    - Simple regressions, classifications, random forests, simple GANs, single head attentions if you need to and progress.
+    - The skill we build should have a progression function.
+  - Only move toward more complex models when simple baselines stop improving.
+    - There should be a clear mechanism for determining how you should improve.
+  - Maintain a clear record of why complexity was introduced and how to reverse your way out of it when you are hitting a local maxima.
 6. **Persistent autonomous loop**
-   - The agent should not stop after one experiment.
-   - A wrapper should repeatedly invoke or resume the agent.
-     - It should be scoped to only do work with Codex to start given third party usage is counted against baseline limits.
-     - There should be messages like "Keep reviewing the autoresearch skill and loop on additional work and testing."
-     - This message can be purely deterministic until a human interrupts it's work.
-   - The agent should read outputs, diagnose failures, generate the next candidate, and keep looping.
-     - Graphs, loss curves, logs, and failed validation examples are highly encouraged to inspect and summarize.
+  - The agent should not stop after one experiment.
+  - A wrapper should repeatedly invoke or resume the agent.
+    - It should be scoped to only do work with Codex to start given third party usage is counted against baseline limits.
+    - There should be messages like "Keep reviewing the autoresearch skill and loop on additional work and testing."
+    - This message can be purely deterministic until a human interrupts it's work.
+  - The agent should read outputs, diagnose failures, generate the next candidate, and keep looping.
+    - Graphs, loss curves, logs, and failed validation examples are highly encouraged to inspect and summarize.
 
 ---
 
@@ -76,7 +71,8 @@ This should feel like Karpathy-style `autoresearch`, but generalized beyond LLM 
 Inspired by `karpathy/autoresearch`, but shaped for a frozen evaluator and a file-backed experiment tree:
 
 ```text
-skills/autoresearch = skill breakdown for how to run autoresearch
+AGENTS.md           = generic coding-agent entrypoint
+.agent/skills/autoresearch = agent skill breakdown for how to run autoresearch
 problem.md          = guided problem scope, goal, application, and baseline target
 runs/*/*/candidate.py = editable candidate surface generated per experiment
 src/autoresearch/  = CLI, onboarding, evaluator, data loading, and scoring harness
@@ -109,9 +105,12 @@ agentic-experiments/
   pyproject.toml
   Makefile
 
-  skills/
-    autoresearch/
-      SKILL.md                  # how the agent runs the loop
+  AGENTS.md                     # generic coding-agent entrypoint
+  .agent/
+    skills/
+      autoresearch/
+        SKILL.md                # concise agent skill
+        references/             # deeper loop, boundary, and search guidance
 
   src/
     autoresearch/
@@ -1404,119 +1403,25 @@ candidate subprocesses run with a minimal environment (seed, limits), not the
 
 ---
 
-## `skills/autoresearch/SKILL.md` Template
+## Agent Skill Layout
 
-The following is a heavyweight skill prompt given to the coding agent to guide its decision making and reference material on how to work inside of this repo.
-
-````md
-# Program
-
-You are an autonomous ML experimentation agent.
-
-Your job is to improve the primary validation score by proposing, implementing, running, evaluating, and logging experiments.
-
-Before choosing an idea, read `problem.md`. It explains the real problem, the target application, the baseline goal, and constraints that should shape candidate selection.
-
-## Objective
-
-Maximize `primary_score` from the fixed evaluator.
-
-Lower-level metrics matter only insofar as they improve robust performance and do not violate guardrails.
-
-## Editable files
-
-You may edit:
-
-- `runs/<branch>/<NNN_name>/candidate.py`
-- run README findings and front matter
-- `ideas.md`
-- `results.tsv` by appending rows only
-
-You may not edit:
-
-- `src/autoresearch/evaluator.py`
-- `src/autoresearch/dataset_loader.py`
-- `src/autoresearch/scoring.py`
-- `scoring_config.yaml`
-- `data/`
-- existing rows in `results.tsv`
-
-## Required loop
-
-Repeat forever:
-
-1. Read `problem.md`, run `autoresearch index --status active`, then inspect `results.tsv`, `ideas.md`, `best/`, and the current `runs/` tree.
-2. Choose one candidate idea.
-3. Choose the correct run branch folder, or create a new one if this is a structural change.
-4. `cd runs/<branch>` and run `new-experiment <short_name> --idea-id <idea_id>` to create the next numbered run directory in that branch.
-5. Edit only the marked `predict(row)` function in the generated `candidate.py`, unless the skill explicitly allows a broader architecture change.
-6. Run:
-
-   ```bash
-   scripts/verify.sh runs/<branch>/<NNN_name>
-   ```
-
-7. Read `metrics.json`, `run.log`, generated plots, and the run README.
-8. Append one row to `results.tsv`.
-9. If validation `primary_score` improved and guardrails passed, keep the commit and mark it accepted.
-10. If not, reset to the previous best commit and mark it rejected.
-11. Update `ideas.md` with the high-level result and next branch to try.
-12. Start the next experiment.
-
-Do not stop after one experiment.
-
-## Guardrails
-
-Reject any candidate with:
-
-- schema validation failures that the candidate cannot fix
-- evaluator errors
-- data leakage
-- holdout degradation after holdout check
-- materially worse secondary metrics without compensating primary-score improvement
-- excessive runtime or memory usage
-- unsupported dependencies
-
-If the evaluator returns `schema_validation_failed`, do not mark it as a scored rejection. Treat it as candidate feedback, fix the output shape in editable code, and rerun the same numbered experiment until it either validates or is abandoned.
-
-## Experiment row format
-
-Append to `results.tsv`:
-
-```tsv
-timestamp commit branch idea_id status primary_score validation_accuracy holdout_score runtime_seconds memory_mb scorer_id schema_version dataset_version correction_of supersedes_run_id notes
-```
-
-## Candidate discipline
-
-Prefer the simplest plausible improvement.
-
-Search order:
-
-1. classical heuristic
-2. feature-conditioned heuristic
-3. hyperparameter sweep
-4. linear model
-5. tree-based model
-6. small neural net
-7. sequence model
-8. transformer-style model
-
-Do not introduce a transformer unless simpler models have plateaued and the result can satisfy runtime and deployment constraints.
-
-## Stopping
-
-You may only stop if blocked.
-
-If blocked, write:
+The coding-agent instructions should use progressive disclosure rather than one giant prompt:
 
 ```text
-BLOCKED: <reason>
-NEEDED: <specific human action>
+AGENTS.md
+  generic repo entrypoint for any coding agent
+
+.agent/skills/autoresearch/SKILL.md
+  concise agent skill with trigger metadata, recovery scan, normal loop,
+  edit boundary, search discipline, and acceptance policy
+
+.agent/skills/autoresearch/references/
+  experiment-loop.md      # run creation, verification, logging, README/status discipline
+  frozen-boundaries.md    # editable/frozen files, split rules, schema/scoring, prompt hygiene
+  search-strategy.md      # candidate progression, overfit signals, plateau handling
 ```
 
-Otherwise continue looping.
-````
+The old `skills/autoresearch/SKILL.md` path is only a compatibility pointer. New agents should start from `AGENTS.md`, then load `.agent/skills/autoresearch/SKILL.md`, then load reference files only when the task calls for that detail.
 
 ---
 
@@ -1577,7 +1482,8 @@ one train/validation split
 one scalar primary score
 one `problem.md`
 one results.tsv
-one `skills/autoresearch/SKILL.md`
+one `AGENTS.md`
+one `.agent/skills/autoresearch/SKILL.md`
 one loop script
 one `.env.example`
 one `pyproject.toml`
