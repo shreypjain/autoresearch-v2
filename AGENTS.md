@@ -10,7 +10,7 @@ This repo is an evaluator-driven experiment harness. The agent proposes candidat
 
 ## Start Here
 
-1. Read [.agent/skills/autoresearch/SKILL.md](.agent/skills/autoresearch/SKILL.md).
+1. Read [.agents/skills/autoresearch/SKILL.md](.agents/skills/autoresearch/SKILL.md).
 2. Read [problem.md](problem.md) for the current problem scope.
 3. Run `autoresearch index --status active`.
 4. Inspect [results.tsv](results.tsv), [ideas.md](ideas.md), [best/README.md](best/README.md), and the active run tree under [runs/](runs).

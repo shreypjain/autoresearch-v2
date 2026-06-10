@@ -124,7 +124,7 @@ autoresearch monitor
 - `results.tsv`: append-only experiment ledger.
 - `ideas.md`: backlog and high-level results.
 - `AGENTS.md`: generic coding-agent entrypoint.
-- `.agent/skills/autoresearch/SKILL.md`: agent skill for the experiment loop.
+- `.agents/skills/autoresearch/SKILL.md`: agent skill for the experiment loop.
 - `architecture.md`: deeper rules for maintainers.
 
 Loop artifacts live under `runs/agent/`. Experiment artifacts live under `runs/<branch>/<numbered_experiment>/`.
