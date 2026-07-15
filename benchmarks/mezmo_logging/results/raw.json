@@ -1,0 +1,142 @@
+{
+  "meta": {
+    "async_batch": 500,
+    "endpoint": "https://api.github.com/",
+    "endpoint_label": "api.github.com (reachable HTTPS stand-in; Mezmo egress blocked in this sandbox)",
+    "ingestion_key_present": false,
+    "local_iters": 100000,
+    "mezmo_probe": [
+      {
+        "elapsed_ms": 704.065,
+        "error": "OSError: Tunnel connection failed: 403 Forbidden",
+        "ok": false,
+        "status": 0
+      },
+      {
+        "elapsed_ms": 711.094,
+        "error": "OSError: Tunnel connection failed: 403 Forbidden",
+        "ok": false,
+        "status": 0
+      },
+      {
+        "elapsed_ms": 807.998,
+        "error": "OSError: Tunnel connection failed: 403 Forbidden",
+        "ok": false,
+        "status": 0
+      }
+    ],
+    "net_batch": 50,
+    "net_iters": 30,
+    "platform": "Linux-6.18.5-x86_64-with-glibc2.39",
+    "python": "3.11.15"
+  },
+  "rows": [
+    {
+      "hot_path": "nothing (loop + dispatch only)",
+      "info": {
+        "batch_size": 1,
+        "flushes": 100200
+      },
+      "max_us": 50.42,
+      "mean_us": 0.23658853,
+      "min_us": 0.189,
+      "n": 100000,
+      "p50_us": 0.214,
+      "p90_us": 0.233,
+      "p99_us": 0.392,
+      "strategy": "noop_baseline",
+      "throughput_ops_s": 4226747.5942303715
+    },
+    {
+      "hot_path": "json.dumps Mezmo payload, no send",
+      "info": {
+        "batch_size": 1,
+        "flushes": 100200
+      },
+      "max_us": 111.636,
+      "mean_us": 3.35980394,
+      "min_us": 2.817,
+      "n": 100000,
+      "p50_us": 3.005,
+      "p90_us": 3.141,
+      "p99_us": 8.652,
+      "strategy": "serialize_only",
+      "throughput_ops_s": 297636.41505819536
+    },
+    {
+      "hot_path": "append line to local file (buffered)",
+      "info": {
+        "batch_size": 1,
+        "flushes": 100200
+      },
+      "max_us": 1807.434,
+      "mean_us": 2.70821171,
+      "min_us": 1.301,
+      "n": 100000,
+      "p50_us": 1.411,
+      "p90_us": 2.302,
+      "p99_us": 32.827,
+      "strategy": "local_file",
+      "throughput_ops_s": 369247.35104996647
+    },
+    {
+      "hot_path": "enqueue to in-memory queue (drainer works off hot path)",
+      "info": {
+        "batch_size": 500,
+        "drained": 100200,
+        "dropped": 0,
+        "enqueued": 100200,
+        "max_queue_depth": 37983
+      },
+      "max_us": 1323.963,
+      "mean_us": 6.30384984,
+      "min_us": 0.764,
+      "n": 100000,
+      "p50_us": 1.134,
+      "p90_us": 2.739,
+      "p99_us": 106.345,
+      "strategy": "async_shmem_enqueue",
+      "throughput_ops_s": 158633.2202354617
+    },
+    {
+      "hot_path": "blocking POST per update -> api.github.com (reachable HTTPS stand-in; Mezmo egress blocked in this sandbox)",
+      "info": {
+        "batch_size": 1,
+        "flushes": 34,
+        "reconnects": 0,
+        "statuses": {
+          "400": 34
+        }
+      },
+      "max_us": 504878.817,
+      "mean_us": 357124.97626666666,
+      "min_us": 313488.027,
+      "n": 30,
+      "p50_us": 340613.774,
+      "p90_us": 446077.354,
+      "p99_us": 504878.817,
+      "strategy": "sync_outbound",
+      "throughput_ops_s": 2.8001401930883043
+    },
+    {
+      "hot_path": "buffer 50, blocking POST every 50th update",
+      "info": {
+        "batch_size": 50,
+        "flushes": 5,
+        "reconnects": 0,
+        "statuses": {
+          "400": 5
+        }
+      },
+      "max_us": 429138.757,
+      "mean_us": 7506.443184999999,
+      "min_us": 0.117,
+      "n": 200,
+      "p50_us": 0.173,
+      "p90_us": 0.359,
+      "p99_us": 356239.307,
+      "strategy": "sync_outbound_batched",
+      "throughput_ops_s": 133.21888614281173
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+strategy	hot_path	n	p50_us	p90_us	p99_us	max_us	mean_us	throughput_ops_s
+noop_baseline	nothing (loop + dispatch only)	100000	0.2140	0.2330	0.3920	50.4200	0.2366	4226747.5942
+serialize_only	json.dumps Mezmo payload, no send	100000	3.0050	3.1410	8.6520	111.6360	3.3598	297636.4151
+local_file	append line to local file (buffered)	100000	1.4110	2.3020	32.8270	1807.4340	2.7082	369247.3510
+async_shmem_enqueue	enqueue to in-memory queue (drainer works off hot path)	100000	1.1340	2.7390	106.3450	1323.9630	6.3038	158633.2202
+sync_outbound	blocking POST per update -> api.github.com (reachable HTTPS stand-in; Mezmo egress blocked in this sandbox)	30	340613.7740	446077.3540	504878.8170	504878.8170	357124.9763	2.8001
+sync_outbound_batched	buffer 50, blocking POST every 50th update	200	0.1730	0.3590	356239.3070	429138.7570	7506.4432	133.2189
